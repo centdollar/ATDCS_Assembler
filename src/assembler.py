@@ -5,7 +5,9 @@ def main():
     file1tokens = tokenize(sys.argv[1])
     print(file1tokens)
 
-
+# tokenize(file)
+#   file - path of the file to tokenize
+# returns tokens[]
 def tokenize(file):
     tokens = []
     with open(file, "r") as f:
