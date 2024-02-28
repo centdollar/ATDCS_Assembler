@@ -2,7 +2,9 @@ import sys
 # import pdb; pdb.set_trace()
 
 dir_path = "../TestCases/"
+output_dir = "../MifFiles/"
 
+#-------------------------------- INSTRUCION -> Machine Code Dicts -------------------------------------
 regRegInstr = {
 'in'    :'100000', 
 'out'   :'100001',
@@ -75,9 +77,9 @@ reg = {'r0' :'00000', 'r1' :'00001', 'r2' :'00010', 'r3' :'00011', 'r4' :'00100'
        'r8' :'01000', 'r9' :'01001', 'r10':'01010', 'r11':'01011', 'r12':'01100', 'r13':'01101', 'r14':'01110', 'r15':'01111',
        'r16':'10000', 'r17':'10001', 'r18':'10010', 'r19':'10011', 'r20':'10100', 'r21':'10101', 'r22':'10110', 'r23':'10111', 
        'r24':'11000', 'r25':'11001', 'r26':'11010', 'r27':'11011', 'r28':'11100', 'r29':'11101', 'r30':'11110', 'r31':'11111'}
+# ------------------------------------------------------------------------------------------------------
 
-
-
+# Lexer Class to Tokenize the assembly file
 class Lexer:
     def __init__(self, content):
         self.content = content
@@ -159,31 +161,54 @@ class Lexer:
             print("Reached invalid token")
 
 
-class syntaxChecker:
+# Parser Class to help with iterating the token lists
+class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
 
     tokens = []
 
+    # Look ahead n tokens and return its value
     def peek(self, n = 0):
         return self.tokens[n]
     
+    # Consume n tokens and shrink the tokens list
     def consume(self, n = 1):
         self.tokens = self.tokens[n::]
+'''
+TODO:   MOVE OVER TO PyCharm IDE
+TODO:   REFACTOR THINGS 
+TODO:   Implement command line parser
+TODO:   Create a file class that will be used for multi file linking
+TODO:   Move the jump calculations into a seperate step
+            - just store the labels in an array instead of the dict and compare against that 
+            - this will allow for more addons to be done
+            - 
+TODO:   Make output files not overlap, check to see if exists then do like (x).mif
 
+TODO:   Implement an AST ..... somday
+TODO:   Implement an include system for functions? 
+            - could do parameter mapping to the CPU registers
+TODO:   Implement multi-programming
+            - have the mif files be combined in a way that each program is at a different section of memory
+            - Need to recreate my memory map for this
+'''
 def main():
     labelAddr = {}    
     addrData = {}    
     symbolVal = {}
     file1tokens = tokenize(sys.argv[1])
     err = syntaxCheck(file1tokens, labelAddr, addrData, symbolVal)
+    print(file1tokens)
     if err[0] != 0:
         print(f"{err[0]} Errors")
         exit()
     else:
         print("No errors")
+    writeMifFile("output.mif", file1tokens, labelAddr, addrData, symbolVal)
     # print(labelAddr)
 
+# ------------------------------------------------ Function Declerations -------------------------------
 # tokenize(file)
 #   file - path of the file to tokenize
 # returns tokens[]
@@ -215,60 +240,23 @@ def syntaxCheck(tokens, labelAddr, addrData, symbolVal):
     global regRegInstr
     global regImmedInstr
 
-
-
     num_warnings = 0
     num_errors = 0
     currentAddress = 0
 
-    # Tracks if the code section exists 
-    # val of 2 means there are both a start and end of code sect
+    # used as flags for if an assembly section is present and valid
     validCodeSect = 0
     validDataSect = 0
     validConstSect = 0
 
     # Check if code section exists
-    if ".code" not in tokens:
-        print("ERROR: no .code directive")
-    else:
-        codeSectStart = tokens.index(".code")
-        validCodeSect += 1
+    (codeSectStart, codeSectEnd, validCodeSect) = isSectionValid("code", validCodeSect, tokens)
 
-    if ".endcode" not in tokens:
-        print("ERROR: no .endcode directive")
-    else:
-        codeSectEnd= tokens.index(".endcode")
-        validCodeSect += 1
-    
     # Check is data section exists
-    if ".data" not in tokens:
-        print("Warning: no data section")
-        num_warnings += 1
-    else:
-        dataSectStart = tokens.index(".data")
-        validDataSect += 1
-    
-    if ".enddata" not in tokens:
-        print("Warning: no enddata section")
-        num_warnings += 1
-    else:
-        dataSectEnd = tokens.index(".enddata")
-        validDataSect += 1
+    (dataSectStart, dataSectEnd, validDataSect) = isSectionValid("data", validDataSect, tokens)
 
     # Check is const section exists
-    if ".const" not in tokens:
-        print("Warning: no const section")
-        num_warnings += 1
-    else:
-        constSectStart = tokens.index(".const")
-        validConstSect += 1
-    
-    if ".endconst" not in tokens:
-        print("Warning: no endconst section")
-        num_warnings += 1
-    else:
-        constSectEnd = tokens.index(".endconst")
-        validConstSect += 1
+    (constSectStart, constSectEnd, validConstSect) = isSectionValid("const", validConstSect, tokens)
     
 
     # Checks that data section is valid
@@ -277,14 +265,14 @@ def syntaxCheck(tokens, labelAddr, addrData, symbolVal):
         num_errors += 1
     else:
         # Creates syntax checker for the code section
-        codeChecker = syntaxChecker(tokens[codeSectStart + 1:codeSectEnd])
+        codeChecker = Parser(tokens[codeSectStart + 1:codeSectEnd])
     
     if validDataSect != 2:
         print("ERROR: No valid data section")
         num_errors += 1
     else:
         # Creates syntax checker for data section
-        dataChecker = syntaxChecker(tokens[dataSectStart + 1: dataSectEnd])
+        dataChecker = Parser(tokens[dataSectStart + 1: dataSectEnd])
 
     # Checks that the const section is valid
     if validConstSect != 2:
@@ -292,9 +280,10 @@ def syntaxCheck(tokens, labelAddr, addrData, symbolVal):
         num_errors += 1
     else:
         # Creates syntax checker for const section
-        constChecker = syntaxChecker(tokens[constSectStart + 1: constSectEnd])
+        constChecker = Parser(tokens[constSectStart + 1: constSectEnd])
 
 
+    # Only check the syntax if the const section exists
     if validConstSect == 2:
         while len(constChecker.tokens):
             token = constChecker.peek()
@@ -327,11 +316,6 @@ def syntaxCheck(tokens, labelAddr, addrData, symbolVal):
             else:
                 print(f"ERROR: Assignment must start with 'let': {token}")
                 dataChecker.consume(3)
-
-
-
-
-
     else:
         print("No Valid const section")
 
@@ -478,7 +462,144 @@ def syntaxCheck(tokens, labelAddr, addrData, symbolVal):
     # syntax checking for data section
     return (num_errors, num_warnings)
 
+
+def isSectionValid(section, section_flag, tokens):
+    start = 0
+    end = 0
+    if ("." + section) not in tokens:
+        print(f"ERROR: no {section} directive")
+    else:
+        start = tokens.index(f".{section}")
+        section_flag += 1
+
+    if (".end" + section) not in tokens:
+        print(f"ERROR: no .end{section} directive")
+    else:
+        end = tokens.index(f".end{section}")
+        section_flag += 1
+    
+
+    return (start, end, section_flag)
+
+
+
+def twosComp(val, bits):
+    val = val - (1 << bits)
+    return val            
+
+def translateCode(tokens, symbolVal, labelAddr):
+    codeParser= Parser(tokens[tokens.index(".code") + 1:tokens.index(".endcode")])
+
+    currAddr = 0
+    tlatedTokens = ''
+
+    while len(codeParser.tokens):
+        token = codeParser.peek()
+        
+        machineCode = ""
+        # Translate regreg instructions
+
+        if token[0] == "@":
+            codeParser.consume()
+            print("got a label")
+            continue
+
+        if token in regRegInstr:
+            machineCode += regRegInstr[token]
+            machineCode += reg[codeParser.peek(1)] 
+            machineCode += reg[codeParser.peek(2)]
+            tlatedTokens += f"{currAddr}:{machineCode}; % {token} {codeParser.peek(1)} {codeParser.peek(2)} % \n"
+            codeParser.consume(3)
+            currAddr += 1
+            continue
+        elif token in regImmedInstr:
+            machineCode += regImmedInstr[token]
+            machineCode += reg[codeParser.peek(1)]
+            machineCode += bin(int(codeParser.peek(2)[1::]))[2::].zfill(5)      # Kinda gross lmao, but it works
+            tlatedTokens += f"{currAddr}:{machineCode}; % {token} {codeParser.peek(1)} {codeParser.peek(2)} % \n"
+            codeParser.consume(3)
+            currAddr += 1
+            continue
+        elif token in jumpInstr:
+            machineCode += jumpInstr[token]
+            currReg = codeParser.peek(1)
+            machineCode = machineCode.replace("*", reg[currReg])
+            tlatedTokens += f"{currAddr}:{machineCode}; % {token} {codeParser.peek(1)} % \n"
+            currAddr += 1
+            codeParser.consume(2)
+
             
+            machineCode = ''
+            
+            labelAddr = labelAddr["@" + codeParser.peek()]
+            
+            if currReg == "r1":
+                if currAddr > labelAddr:
+                    jumpVal = twosComp(currAddr - labelAddr + 1, 16)
+                else:
+                    jumpVal = labelAddr - currAddr - 1
+
+                tlatedTokens += f"{currAddr}:{bin(jumpVal)[1::].zfill(16)[2::]}; % {codeParser.peek()} % \n"
+                codeParser.consume()
+
+            currAddr += 1
+            continue
+        
+        elif token in memInstr:
+            machineCode += memInstr[token]
+            machineCode += reg[codeParser.peek(1)]
+            machineCode += reg[codeParser.peek(2)]
+            tlatedTokens += f"{currAddr}:{machineCode}; % {token} {codeParser.peek(1)} {codeParser.peek(2)} % \n"
+            codeParser.consume(3)
+
+            currAddr += 1
+            addr = codeParser.peek()
+            if addr in symbolVal:
+                print("Not implemented")
+                tlatedTokens += f"NOT DONE"
+                # tlatedTokens += f"{currAddr}:{symbolVal[addr]}"
+            else:
+                tlatedTokens += f"{currAddr}:{bin(int(addr, 16))[2::].zfill(16)}; % {addr} % \n"
+
+            codeParser.consume()
+                
+
+
+            currAddr += 1
+            continue
+
+
+        else:
+            codeParser.consume()
+            print(token)
+    tlatedTokens += f"[{currAddr} .. 16383] : 11111111111111; %EMPTY MEMORY LOCATIONS % \nEND;"
+    
+    return tlatedTokens
+
+
+def writeMifFile(filepath, tokens, labelAddr, addrData, symbolVal):
+
+    # Write to the mif file as one large string
+    tlatedTokens = ""
+    currAddr = 0
+    MIFHEADER = "WIDTH = 16\nDEPTH = 16384\nADDRESS_RADIX = DEC\nDATA_RADIX = BIN\n\n\nCONTENT BEGIN\n"
+
+    tlatedTokens += MIFHEADER
+
+    tlatedTokens += translateCode(tokens, symbolVal, labelAddr)
+    # print(tlatedTokens)
+    with open(output_dir + filepath, "w") as f:
+        f.write(tlatedTokens)
+
+    # translate code section
+    # print(tokens)
+'''if currAddr > labelAddr:
+        return twosComp(currAddr - labelAddr + 1, 16)
+    else: return labelAddr - currAddr - 1'''
+
+
+    # Create Parser for code tokens
+
 
 
 if __name__ == "__main__":
