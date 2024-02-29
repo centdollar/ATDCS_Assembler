@@ -4,6 +4,7 @@ import sys
 
 dir_path = "../TestCases/"
 output_dir = "../MifFiles/"
+mifFileHeader = "WIDTH = 16\nDEPTH = 16384\nADDRESS_RADIX = DEC\nDATA_RADIX = BIN\n\n\nCONTENT BEGIN\n"
 
 # -------------------------------- INSTRUCION -> Machine Code Dicts -------------------------------------
 regRegInstr = {
@@ -143,10 +144,9 @@ class Lexer:
         if len(self.content) == 0:
             return None
 
-        elif self.content[0] == "m":
-            if self.content[1] == "[":
-                self.content = self.content[2:8] + self.content[9::]
-                return self.chopWhileAlphaNum()
+        elif self.content[0] == "m" and self.content[1] == "[":
+            self.content = self.content[2:8] + self.content[9::]
+            return self.chopWhileAlphaNum()
 
         elif self.content[0:2] == "0x":
             return self.chopWhileAlphaNum()
@@ -203,21 +203,43 @@ class MultiProgramAssembler:
     # Memory map that will give the starting address of each program
     memoryMap = []
 
+    def Multiprogram(self):
+        mifInstrString = mifFileHeader
+        mifDataString = mifFileHeader
 
+        i = 0
+        labelAddr = {}
+        addrData = {}
+        for file in self.files:
+            symbolVal = {}
+            forAddr = {}
+            print(f"Tokenizing {file}...")
+            tokens = tokenize(file)
+            err = syntaxCheck(tokens, labelAddr, addrData, symbolVal, forAddr)
+            if err[0] != 0:
+                print(f"{err[0]} Errors in {file}")
+                exit()
+            # else:
+            #     print(f"No errors in {file}")
+            mifInstrString += translateCode(tokens, symbolVal, labelAddr, forAddr, self.memoryMap[i], self.memoryMap[i+1])
+            i += 1
 
+        mifDataString += translateData(addrData)
+        mifInstrString += "\nEND;"
+        mifDataString += "\nEND;"
+        with open(output_dir + "output.mif", "w") as f: f.write(mifInstrString)
+        with open(output_dir + "outputMM.mif", "w") as f: f.write(mifDataString)
+        print("Instruction Mif File generated")
+        print("Data Mif File generated")
 
 
 '''
 TODO:   REFACTOR THINGS 
-TODO:   Implement command line parser
-            - Things such as having include files to check for function calls elsewhere
-TODO:   Create a file class that will be used for multi file linking
 TODO:   Move the jump calculations into a separate step
             - just store the labels in an array instead of the dict and compare against that 
             - this will allow for more addons to be done
             - 
 TODO:   Make output files not overlap, check to see if exists then do like (x).mif
-
 TODO:   Implement an AST ..... someday
 TODO:   Implement an include system for functions? 
             - could do parameter mapping to the CPU registers
@@ -225,45 +247,19 @@ TODO:   Implement an include system for functions?
 
 
 def main():
-    memoryMap = [0, 1000, 16383]
+    memoryMap = [0, 1000, 2000,16383]
     i = 0
     files = []
-    for arg in sys.argv:
-        print(arg)
-        if i == 0:
-            i += 1
-            continue
-        files.append(arg)
-    print(files)
-    multiprogramming = MultiProgramAssembler(files, memoryMap)
-    mifInstrString = "WIDTH = 16\nDEPTH = 16384\nADDRESS_RADIX = DEC\nDATA_RADIX = BIN\n\n\nCONTENT BEGIN\n"
-    mifDataString = "WIDTH = 16\nDEPTH = 16384\nADDRESS_RADIX = DEC\nDATA_RADIX = BIN\n\n\nCONTENT BEGIN\n"
-
-    i = 0
-    labelAddr = {}
-    addrData = {}
-    for file in multiprogramming.files:
-        symbolVal = {}
-        tokens = tokenize(file)
-        err = syntaxCheck(tokens, labelAddr, addrData, symbolVal)
-        if err[0] != 0:
-            print(f"{err[0]} Errors")
-            exit()
-        else:
-            print("No errors")
-        print("Generating mif file...")
-        mifInstrString += writeMifFile("output.mif", tokens, labelAddr, addrData, symbolVal, multiprogramming.memoryMap[i], multiprogramming.memoryMap[i+1])
-
-        print("Mif File generated")
-        i += 1
-    mifDataString += translateData(addrData)
-    mifInstrString += "\nEND;"
-    mifDataString += "\nEND;"
-    with open(output_dir + "output.mif", "w") as f:
-        f.write(mifInstrString)
-    with open(output_dir + "outputMM.mif", "w") as f:
-        f.write(mifDataString)
-
+    if len(sys.argv) == 1:
+        quit("Usage: python3 assembler.py [-h -M] [files]")
+    if sys.argv[1] == "-h":
+        quit("-h : prints the help screen\n-M [MemoryMap file] [files] : combines assembly files for "
+             "multi-programing, expects 1 or more input files")
+    if sys.argv[1] == "-M":
+        for i in range(2, len(sys.argv)):
+            files.append(sys.argv[i])
+        multiprogramming = MultiProgramAssembler(files, memoryMap)
+        multiprogramming.Multiprogram()
 
 
 # ------------------------------------------------ Function Declarations -------------------------------
@@ -271,15 +267,12 @@ def main():
 #   file - path of the file to tokenize
 # returns tokens[]
 def tokenize(file):
-    print("Tokenizing file...")
     tokens = []
     with open(dir_path + file, "r") as f:
         # Read the file into a string
         F = f.read()
-
     # Create a lexer with the contents of the asm file
     lexer = Lexer(F)
-
     # Create tokens until none remain
     while 1:
         token = lexer.nextToken()
@@ -294,7 +287,7 @@ def tokenize(file):
 #   tokens -> array of tokens to parse (will include all tokens gathered from source .asm file)
 #   Will provide syntax feedback, and print out errors in syntax
 # return 1 for errors and 0 for no errors
-def syntaxCheck(tokens, labelAddr, addrData, symbolVal):
+def syntaxCheck(tokens, labelAddr, addrData, symbolVal, forAddr):
     print("Syntax checking...")
     global memInstr
     global reg
@@ -312,7 +305,6 @@ def syntaxCheck(tokens, labelAddr, addrData, symbolVal):
 
     # Check if code section exists
     (codeSectStart, codeSectEnd, validCodeSect) = isSectionValid("code", validCodeSect, tokens)
-
     # Check is data section exists
     (dataSectStart, dataSectEnd, validDataSect) = isSectionValid("data", validDataSect, tokens)
 
@@ -323,24 +315,21 @@ def syntaxCheck(tokens, labelAddr, addrData, symbolVal):
     if validCodeSect != 2:
         print("ERROR: No valid code section")
         num_errors += 1
-    else:
-        # Creates syntax checker for the code section
-        codeChecker = Parser(tokens[codeSectStart + 1:codeSectEnd])
+    # Creates syntax checker for the code section
+    else: codeChecker = Parser(tokens[codeSectStart + 1:codeSectEnd])
 
     if validDataSect != 2:
         print("ERROR: No valid data section")
         num_errors += 1
-    else:
-        # Creates syntax checker for data section
-        dataChecker = Parser(tokens[dataSectStart + 1: dataSectEnd])
+    # Creates syntax checker for data section
+    else: dataChecker = Parser(tokens[dataSectStart + 1: dataSectEnd])
 
     # Checks that the const section is valid
     if validConstSect != 2:
         print("ERROR: No valid const section")
         num_errors += 1
-    else:
-        # Creates syntax checker for const section
-        constChecker = Parser(tokens[constSectStart + 1: constSectEnd])
+    # Creates syntax checker for const section
+    else: constChecker = Parser(tokens[constSectStart + 1: constSectEnd])
 
     # Only check the syntax if the const section exists
     if validConstSect == 2:
@@ -350,6 +339,7 @@ def syntaxCheck(tokens, labelAddr, addrData, symbolVal):
                 param1 = constChecker.peek(1)
                 param2 = constChecker.peek(2)
                 param3 = constChecker.peek(3)
+
 
                 if token in symbolVal:
                     print(f"Warning: assigning data to an symbol address that has already been assigned: {token}")
@@ -374,13 +364,14 @@ def syntaxCheck(tokens, labelAddr, addrData, symbolVal):
                 symbolVal[param1] = param3
             else:
                 print(f"ERROR: Assignment must start with 'let': {token}")
-                dataChecker.consume(3)
+                constChecker.consume(3)
     else:
         print("No Valid const section")
 
     # syntax checking for code section
     if validCodeSect == 2:
         forLoopCount = 0
+        endForLoopCount = 0
         while len(codeChecker.tokens):
             token = codeChecker.peek()
             # Label Handling
@@ -388,8 +379,7 @@ def syntaxCheck(tokens, labelAddr, addrData, symbolVal):
                 if token in labelAddr:
                     print("ERROR: reassignment of label attempted: {token}")
                     num_errors += 1
-                else:
-                    labelAddr[token] = currentAddress
+                else: labelAddr[token] = currentAddress
                 codeChecker.consume()
                 continue
 
@@ -399,19 +389,16 @@ def syntaxCheck(tokens, labelAddr, addrData, symbolVal):
                 currentAddress += 1
                 param1 = codeChecker.peek()
                 param2 = codeChecker.peek(1)
+                codeChecker.consume(2)
                 if param1 not in reg:
                     print(f"ERROR: expected a register {token} {param1} {param2}")
                     num_errors += 1
-
-                codeChecker.consume()
 
                 # expects two registers as arguments
                 if param2 not in reg:
                     print(f"ERROR: expected a register {token} {param1} {param2}")
                     num_errors += 1
-                codeChecker.consume()
                 continue
-
 
             # REGIMM Instructions
             elif token in regImmedInstr:
@@ -514,7 +501,7 @@ def syntaxCheck(tokens, labelAddr, addrData, symbolVal):
                     num_errors += 1
                 codeChecker.consume()
                 currentAddress += 1
-                labelAddr[token + str(forLoopCount)] = currentAddress
+                forAddr[token + str(forLoopCount)] = currentAddress
                 forLoopCount += 1
                 continue
 
@@ -538,6 +525,7 @@ def syntaxCheck(tokens, labelAddr, addrData, symbolVal):
                     num_errors += 1
                 codeChecker.consume()
                 currentAddress += 3
+                endForLoopCount += 1
                 continue
 
 
@@ -545,8 +533,11 @@ def syntaxCheck(tokens, labelAddr, addrData, symbolVal):
                 num_errors += 1
                 print(f"Invalid token: {token}")
                 codeChecker.consume()
+
     else:
-        print(f"No valid code section")
+        print(f"No valid code section {validCodeSect}")
+
+    # if forLoopCount != endForLoopCount: quit("Syntax Error: number of for and endfor are not equal")
 
     # Syntax checking for the data section
     if validDataSect == 2:
@@ -582,7 +573,7 @@ def syntaxCheck(tokens, labelAddr, addrData, symbolVal):
         print("No valid data section")
 
     # syntax checking for data section
-    return (num_errors, num_warnings)
+    return num_errors, num_warnings
 
 
 def isSectionValid(section, section_flag, tokens):
@@ -608,10 +599,8 @@ def twosComp(val, bits):
     return val
 
 
-def translateCode(tokens, symbolVal, labelAddr, startAddr, endAddr):
-    print("Translating...")
+def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
     codeParser = Parser(tokens[tokens.index(".code") + 1:tokens.index(".endcode")])
-
     currAddr = startAddr
     tlatedTokens = ''
     forLoopCount = 0
@@ -737,7 +726,7 @@ def translateCode(tokens, symbolVal, labelAddr, startAddr, endAddr):
             tlatedTokens += f"{currAddr}:{machineCode}; % jz0 r1 for{forLoopCount - 1} % \n"
             currAddr += 1
             jAddr = "for" + str(forLoopCount - 1)
-            jAddrBin = bin(twosComp(currAddr - (labelAddr[jAddr]) + 1, 16))[2::].zfill(16)[1::]
+            jAddrBin = bin((twosComp((currAddr - startAddr) - (forAddr[jAddr]) + 1, 16)))[2::].zfill(16)[1::]
             tlatedTokens += f"{currAddr}:{jAddrBin}; % offset to jump to for{forLoopCount - 1} % \n"
             currAddr += 1
             forLoopCount -= 1
@@ -765,7 +754,6 @@ def writeMifFile(filepath, tokens, labelAddr, addrData, symbolVal, startingAddre
 
 def translateData(addrData):
     sorted_dict = dict(sorted(addrData.items()))
-    print(sorted_dict)
     tlatedData = ''
     for key in sorted_dict:
         tlatedData += f"{int(key, 16)}:{bin(int(sorted_dict[key], 16))[2::].zfill(16)[1::]}; % {key} = {sorted_dict[key]} % \n"
