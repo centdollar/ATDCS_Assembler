@@ -219,7 +219,6 @@ def main():
     symbolVal = {}
     file1tokens = tokenize(sys.argv[1])
     err = syntaxCheck(file1tokens, labelAddr, addrData, symbolVal)
-    # print(file1tokens)
     if err[0] != 0:
         print(f"{err[0]} Errors")
         exit()
@@ -228,7 +227,6 @@ def main():
     print("Generating mif file...")
     writeMifFile("output.mif", file1tokens, labelAddr, addrData, symbolVal)
     print("Mif File generated")
-    # print(labelAddr)
 
 
 # ------------------------------------------------ Function Declarations -------------------------------
