@@ -192,6 +192,20 @@ class Parser:
     def consume(self, n=1):
         self.tokens = self.tokens[n::]
 
+class MultiProgramAssembler:
+    def __init__(self, files, memoryMap):
+        self.files = files
+        self.memoryMap = memoryMap
+
+    # Files that will be combined into one mif file for multiprogramming
+    files = []
+
+    # Memory map that will give the starting address of each program
+    memoryMap = []
+
+
+
+
 
 '''
 TODO:   REFACTOR THINGS 
@@ -207,26 +221,49 @@ TODO:   Make output files not overlap, check to see if exists then do like (x).m
 TODO:   Implement an AST ..... someday
 TODO:   Implement an include system for functions? 
             - could do parameter mapping to the CPU registers
-TODO:   Implement multi-programming
-            - have the mif files be combined in a way that each program is at a different section of memory
-            - Need to recreate my memory map for this
 '''
 
 
 def main():
+    memoryMap = [0, 1000, 16383]
+    i = 0
+    files = []
+    for arg in sys.argv:
+        print(arg)
+        if i == 0:
+            i += 1
+            continue
+        files.append(arg)
+    print(files)
+    multiprogramming = MultiProgramAssembler(files, memoryMap)
+    mifInstrString = "WIDTH = 16\nDEPTH = 16384\nADDRESS_RADIX = DEC\nDATA_RADIX = BIN\n\n\nCONTENT BEGIN\n"
+    mifDataString = "WIDTH = 16\nDEPTH = 16384\nADDRESS_RADIX = DEC\nDATA_RADIX = BIN\n\n\nCONTENT BEGIN\n"
+
+    i = 0
     labelAddr = {}
     addrData = {}
-    symbolVal = {}
-    file1tokens = tokenize(sys.argv[1])
-    err = syntaxCheck(file1tokens, labelAddr, addrData, symbolVal)
-    if err[0] != 0:
-        print(f"{err[0]} Errors")
-        exit()
-    else:
-        print("No errors")
-    print("Generating mif file...")
-    writeMifFile("output.mif", file1tokens, labelAddr, addrData, symbolVal)
-    print("Mif File generated")
+    for file in multiprogramming.files:
+        symbolVal = {}
+        tokens = tokenize(file)
+        err = syntaxCheck(tokens, labelAddr, addrData, symbolVal)
+        if err[0] != 0:
+            print(f"{err[0]} Errors")
+            exit()
+        else:
+            print("No errors")
+        print("Generating mif file...")
+        mifInstrString += writeMifFile("output.mif", tokens, labelAddr, addrData, symbolVal, multiprogramming.memoryMap[i], multiprogramming.memoryMap[i+1])
+
+        print("Mif File generated")
+        i += 1
+    mifDataString += translateData(addrData)
+    mifInstrString += "\nEND;"
+    mifDataString += "\nEND;"
+    with open(output_dir + "output.mif", "w") as f:
+        f.write(mifInstrString)
+    with open(output_dir + "outputMM.mif", "w") as f:
+        f.write(mifDataString)
+
 
 
 # ------------------------------------------------ Function Declarations -------------------------------
@@ -571,11 +608,11 @@ def twosComp(val, bits):
     return val
 
 
-def translateCode(tokens, symbolVal, labelAddr):
+def translateCode(tokens, symbolVal, labelAddr, startAddr, endAddr):
     print("Translating...")
     codeParser = Parser(tokens[tokens.index(".code") + 1:tokens.index(".endcode")])
 
-    currAddr = 0
+    currAddr = startAddr
     tlatedTokens = ''
     forLoopCount = 0
     while len(codeParser.tokens):
@@ -649,7 +686,7 @@ def translateCode(tokens, symbolVal, labelAddr):
         elif token in callInstr:
             if token == "ret":
                 zero = "0"
-                tlatedTokens += f"{currAddr}:{callInstr[token].ljust(16, zero)}; % {token} % \n "
+                tlatedTokens += f"{currAddr}:{callInstr[token].ljust(16, zero)}; % {token} % \n"
                 codeParser.consume()
                 currAddr += 1
                 continue
@@ -709,22 +746,31 @@ def translateCode(tokens, symbolVal, labelAddr):
         else:
             codeParser.consume()
             print(token)
-    tlatedTokens += f"[{currAddr} .. 16383] : 11111111111111; %EMPTY MEMORY LOCATIONS % \nEND;"
+    tlatedTokens += f"[{currAddr} .. {endAddr - 1}] : 11111111111111; %EMPTY MEMORY LOCATIONS % \n"
 
     return tlatedTokens
 
 
-def writeMifFile(filepath, tokens, labelAddr, addrData, symbolVal):
+# TODO: Refactor this
+def writeMifFile(filepath, tokens, labelAddr, addrData, symbolVal, startingAddress, nextStartingAddress = "16383"):
     # Write to the mif file as one large string
     tlatedTokens = ""
-    MIFHEADER = "WIDTH = 16\nDEPTH = 16384\nADDRESS_RADIX = DEC\nDATA_RADIX = BIN\n\n\nCONTENT BEGIN\n"
 
-    tlatedTokens += MIFHEADER
 
-    tlatedTokens += translateCode(tokens, symbolVal, labelAddr)
-    with open(output_dir + filepath, "w") as f:
-        f.write(tlatedTokens)
 
+    tlatedTokens += translateCode(tokens, symbolVal, labelAddr, startingAddress, nextStartingAddress)
+
+    return tlatedTokens
+
+
+def translateData(addrData):
+    sorted_dict = dict(sorted(addrData.items()))
+    print(sorted_dict)
+    tlatedData = ''
+    for key in sorted_dict:
+        tlatedData += f"{int(key, 16)}:{bin(int(sorted_dict[key], 16))[2::].zfill(16)[1::]}; % {key} = {sorted_dict[key]} % \n"
+
+    return tlatedData
 
 
 if __name__ == "__main__":
