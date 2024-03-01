@@ -2,7 +2,7 @@ import sys
 
 dir_path = "../TestCases/"
 output_dir = "../MifFiles/"
-mifFileHeader = "WIDTH = 16\nDEPTH = 16384\nADDRESS_RADIX = DEC\nDATA_RADIX = BIN\n\n\nCONTENT BEGIN\n"
+mifFileHeader = "WIDTH = 16;\nDEPTH = 16384;\nADDRESS_RADIX = DEC;\nDATA_RADIX = BIN;\n\n\nCONTENT BEGIN\n"
 
 # -------------------------------- INSTRUCTION -> Machine Code Dicts -------------------------------------
 regRegInstr = {
@@ -253,19 +253,21 @@ MAX_MEMORY_ADDR = 2**14 - 1
 
 def main():
     # Needs to be populated in order of programs memory space [start of P1, end of P1, start of P2 ...]
-    memoryMap = [0, 1000, 2000, MAX_MEMORY_ADDR]
+    # memoryMap = [0, 1000, 2000, MAX_MEMORY_ADDR]
+    memoryMap = [0, MAX_MEMORY_ADDR]
     files = []
     if len(sys.argv) == 1:
         quit("Usage: python3 assembler.py [-h -M] [files]")
     if sys.argv[1] == "-h":
         quit("-h : prints the help screen\n-M [MemoryMap file] [files] : combines assembly files for "
              "multi-programing, expects 1 or more input files")
-    if sys.argv[1] == "-M":
+    elif sys.argv[1] == "-M":
         for i in range(2, len(sys.argv)):
             files.append(sys.argv[i])
         mp = MultiProgramAssembler(files, memoryMap)
         mp.Multiprogram()
-
+    else:
+        quit("Usage: python3 assembler.py [-h -M] [files]")
 
 # ------------------------------------------------ Function Declarations -------------------------------
 # tokenize(file)
@@ -689,7 +691,13 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
             continue
 
         elif token == "endfor":
-            machineCode += regImmedInstr["cmp"]
+            machineCode += regImmedInstr["addc"]
+            machineCode += reg[p.peek(1)]
+            machineCode += "00001"
+            tlatedTokens += f"{currAddr}:{machineCode}; % addc {p.peek(1)} #1 % \n"
+            currAddr += 1
+
+            machineCode = regImmedInstr["cmp"]
             machineCode += reg[p.peek(1)]
             machineCode += bin(int(p.peek(3)))[2::].zfill(5)
             # Adds the compare instruciton to the mif file

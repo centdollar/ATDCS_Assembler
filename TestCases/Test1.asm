@@ -17,31 +17,21 @@ let hello = 0x1234
 
 
 .code
-@Label21 cmp r1 #15
-add r1 r1
-jz0 r1 Label21
 
 
 for r19 = 0
-add r1 r1
-for r18 = 0
-add r1 r1
-addc r2 #2
-endfor r18 < 10
+add r2 r1
+mul r4 r2
+
+
 endfor r19 < 10
-add r1 r1
-call r1 MM
-
-ld r1 r10 m[0x2000]
-addc r1 #2 
-subc r2 #31 
-st r0 r1 m[0x1200]
-@Label123 ld r0 r1 m[0x3421]
 
 
-@MM add r1 r1
-sub r2 r3
-ret
+
+sub r31 r31
+addc r31 #1
+add r1 r2
+out r31 r0
 
 
 .endcode
