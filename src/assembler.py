@@ -1,12 +1,10 @@
 import sys
 
-# import pdb; pdb.set_trace()
-
 dir_path = "../TestCases/"
 output_dir = "../MifFiles/"
 mifFileHeader = "WIDTH = 16\nDEPTH = 16384\nADDRESS_RADIX = DEC\nDATA_RADIX = BIN\n\n\nCONTENT BEGIN\n"
 
-# -------------------------------- INSTRUCION -> Machine Code Dicts -------------------------------------
+# -------------------------------- INSTRUCTION -> Machine Code Dicts -------------------------------------
 regRegInstr = {
     'in': '100000',
     'out': '100001',
@@ -85,8 +83,8 @@ reg = {'r0': '00000', 'r1': '00001', 'r2': '00010', 'r3': '00011', 'r4': '00100'
        'r24': '11000', 'r25': '11001', 'r26': '11010', 'r27': '11011', 'r28': '11100', 'r29': '11101', 'r30': '11110',
        'r31': '11111'}
 
-
 # ------------------------------------------------------------------------------------------------------
+
 
 # Lexer Class to Tokenize the assembly file
 class Lexer:
@@ -95,10 +93,12 @@ class Lexer:
 
     content = ""
 
+    # Trims white space to the left
     def trim_left(self):
         while len(self.content) != 0 and self.content[0].isspace():
             self.content = self.content[1::]
 
+    # chop the array n elements from the left
     def chop(self, n):
         token = self.content[0:n]
         self.content = self.content[n::]
@@ -192,6 +192,7 @@ class Parser:
     def consume(self, n=1):
         self.tokens = self.tokens[n::]
 
+
 class MultiProgramAssembler:
     def __init__(self, files, memoryMap):
         self.files = files
@@ -227,14 +228,17 @@ class MultiProgramAssembler:
         mifDataString += translateData(addrData)
         mifInstrString += "\nEND;"
         mifDataString += "\nEND;"
-        with open(output_dir + "output.mif", "w") as f: f.write(mifInstrString)
-        with open(output_dir + "outputMM.mif", "w") as f: f.write(mifDataString)
+        with open(output_dir + "output.mif", "w") as f:
+            f.write(mifInstrString)
+        with open(output_dir + "outputMM.mif", "w") as f:
+            f.write(mifDataString)
         print("Instruction Mif File generated")
         print("Data Mif File generated")
 
 
 '''
 TODO:   REFACTOR THINGS 
+TODO:   Create an assembly file class, but keep in mind that need to be able to multi-program
 TODO:   Move the jump calculations into a separate step
             - just store the labels in an array instead of the dict and compare against that 
             - this will allow for more addons to be done
@@ -245,10 +249,11 @@ TODO:   Implement an include system for functions?
             - could do parameter mapping to the CPU registers
 '''
 
+MAX_MEMORY_ADDR = 2**14 - 1
 
 def main():
-    memoryMap = [0, 1000, 2000,16383]
-    i = 0
+    # Needs to be populated in order of programs memory space [start of P1, end of P1, start of P2 ...]
+    memoryMap = [0, 1000, 2000, MAX_MEMORY_ADDR]
     files = []
     if len(sys.argv) == 1:
         quit("Usage: python3 assembler.py [-h -M] [files]")
@@ -258,8 +263,8 @@ def main():
     if sys.argv[1] == "-M":
         for i in range(2, len(sys.argv)):
             files.append(sys.argv[i])
-        multiprogramming = MultiProgramAssembler(files, memoryMap)
-        multiprogramming.Multiprogram()
+        mp = MultiProgramAssembler(files, memoryMap)
+        mp.Multiprogram()
 
 
 # ------------------------------------------------ Function Declarations -------------------------------
@@ -283,6 +288,221 @@ def tokenize(file):
     return tokens
 
 
+def syntaxCheckConst(tokens, start, end, symbolVal):
+    p = Parser(tokens[start + 1: end])
+    numErrors = 0
+    while len(p.tokens):
+        token = p.peek()
+        p.consume()
+        if token == "let":
+            param1 = p.peek()
+            param2 = p.peek(1)
+            param3 = p.peek(2)
+
+            if token in symbolVal:
+                print(f"Warning: assigning data to an symbol address that has already been assigned: {token}")
+                p.consume(3)
+                continue
+
+            if param1[0].isnumeric():
+                print(f"ERROR: start of symbol can not be a number: {param1}")
+
+            if param2 != "=":
+                print(f"ERROR: Expected =, got: {token} *{param1}* {param2}")
+
+            if param3[0:2] == "0x":
+                if int(param3, 16) > int("0xFFFF", 16) or int(param3, 16) < int("0x0000", 16):
+                    print(f"ERROR: memory address must be between 0x0000 and 0xFFFF: {token} ")
+                    numErrors += 1
+            p.consume(3)
+
+            symbolVal[param1] = param3
+        else:
+            print(f"ERROR: Assignment must start with 'let': {token}")
+            p.consume(3)
+    return numErrors
+
+
+def syntaxCheckCode(tokens, start, end, labelAddr, forAddr):
+    p = Parser(tokens[start + 1:end])
+    forLoopCount = 0
+    endForLoopCount = 0
+    numErrors = 0
+    currentAddress = 0
+    while len(p.tokens):
+        token = p.peek()
+        p.consume()
+        # Label Handling
+        if token[0] == "@":
+            if token in labelAddr:
+                print("ERROR: reassignment of label attempted: {token}")
+                numErrors += 1
+            else:
+                labelAddr[token] = currentAddress
+            continue
+
+        # REGREG Instructions
+        elif token in regRegInstr:
+            currentAddress += 1
+            param1 = p.peek()
+            param2 = p.peek(1)
+            p.consume(2)
+            if param1 not in reg:
+                print(f"ERROR: expected a register {token} {param1} {param2}")
+                numErrors += 1
+
+            # expects two registers as arguments
+            if param2 not in reg:
+                print(f"ERROR: expected a register {token} {param1} {param2}")
+                numErrors += 1
+            continue
+
+        # REGIMM Instructions
+        elif token in regImmedInstr:
+            currentAddress += 1
+            param1 = p.peek()
+            param2 = p.peek(1)
+            if param1 not in reg:
+                print(f"ERROR: expected a register {token} *{param1}* {param2}")
+                numErrors += 1
+
+            if param2[0] != "#":
+                print(f"ERROR: immediate needs to be #(val): {token} {param1} *{param2}*")
+                numErrors += 1
+
+            if int(param2[1::]) > 31 or int(param2[1::]) < 0:
+                print(f"ERROR: Immediate value needs to be between 0 and 31: {token} {param1} *#{param2[1::]}*")
+                numErrors += 1
+            p.consume(2)
+            continue
+
+        # MEM Instructions
+        elif token in memInstr:
+            currentAddress += 2
+            param1 = p.peek()
+            param2 = p.peek(1)
+            param3 = p.peek(2)
+            if param1 not in reg:
+                print(f"ERROR: expected a register {token} *{param1}* {param2} {param3}")
+                numErrors += 1
+
+            if param2 not in reg:
+                print(f"ERROR: expected a register {token} {param1} *{param2}* {param3}")
+                numErrors += 1
+
+            if int(param3, 16) > int("0xFFFF", 16) or int(param3, 16) < int("0x0000", 16):
+                print(
+                    f"ERROR: memory address must be between 0x0000 and 0xFFFF: {token} {param1} {param2} *{param3}*")
+                numErrors += 1
+            p.consume(3)
+            continue
+
+        # Jump instructions
+        elif token in jumpInstr:
+            currentAddress += 2
+            param1 = p.peek()
+            param2 = p.peek(1)
+            if param1 not in reg:
+                print(f"ERROR: expected a register {token} *{param1}* {param2}")
+                numErrors += 1
+            p.consume(2)
+            continue
+
+        elif token in callInstr:
+            if token == "ret":
+                continue
+            currentAddress += 2
+            param1 = p.peek()
+            param2 = p.peek(1)
+            if param1 not in reg:
+                print(f"ERROR: expected a register {token} *{param1}* {param2}")
+                numErrors += 1
+            p.consume(2)
+            continue
+
+        elif token == "for":
+            param1 = p.peek()
+            param2 = p.peek(1)
+            param3 = p.peek(2)
+
+            if param1 not in reg:
+                print(f"ERROR: register needs to be assigned as iterator: {token} *{param1}* {param2} {param3}")
+                numErrors += 1
+
+            if param2 != "=":
+                print(f"ERROR: invalid token, needs to be = : {token} {param1} *{param2}* {param3}")
+                numErrors += 1
+
+            if int(param3) > 31 or int(param3) < 0:
+                print(f"ERROR: iterator initial value must be between 0 and 31: {token} {param1} {param2} *{param3}*")
+                numErrors += 1
+            p.consume(3)
+            currentAddress += 1
+            forAddr[token + str(forLoopCount)] = currentAddress
+            forLoopCount += 1
+            continue
+
+        elif token == "endfor":
+            param1 = p.peek()
+            param2 = p.peek(1)
+            param3 = p.peek(2)
+            if param1 not in reg:
+                print(f"ERROR: register needs to be assigned as iterator: {token} *{param1}* {param2} {param3}")
+                numErrors += 1
+
+            if param2 != "<":
+                print(
+                    f"ERROR: invalid token, comparison can only be less than for now: {token} {param1} *{param2}* {param3}")
+                numErrors += 1
+
+            if int(param3) < 0 or int(param3) > 31:
+                print(f"ERROR: iterator initial value must be between 0 and 31: {token} {param1} {param2} *{param3}*")
+                numErrors += 1
+            p.consume(3)
+            currentAddress += 3
+            endForLoopCount += 1
+            continue
+
+        else:
+            numErrors += 1
+            print(f"Invalid token: {token}")
+            p.consume()
+    return numErrors
+
+
+def syntaxCheckData(tokens, start, end, addrData):
+    p = Parser(tokens[start + 1: end])
+    errorCount = 0
+    while len(p.tokens):
+        token = p.peek()
+        p.consume()
+
+        if token[0:2] == "0x":
+            if token in addrData:
+                print(f"Warning: assigning data to an address that has already been assigned: {token}")
+                p.consume(2)
+                continue
+            param1 = p.peek()
+            param2 = p.peek(1)
+            if int(token, 16) > MAX_MEMORY_ADDR or int(token, 16) < int("0x0000", 16):
+                print(f"ERROR: memory address must be between 0x0000 and {hex(MAX_MEMORY_ADDR)}: {token} ")
+                errorCount += 1
+
+            if param1 != "=":
+                print(f"ERROR: Expected =, got: {token} *{param1}* {param2}")
+
+            if int(param2, 16) > int("0xFFFF", 16) or int(param2, 16) < int("0x0000", 16):
+                print(f"ERROR: memory address must be between 0x0000 and 0xFFFF: {token} ")
+                errorCount += 1
+            p.consume(2)
+            addrData[token] = param2
+            continue
+        else:
+            print(f"ERROR: invalid token {token}")
+            p.consume(2)
+    return errorCount
+
+
 # syntaxCheck(tokens)
 #   tokens -> array of tokens to parse (will include all tokens gathered from source .asm file)
 #   Will provide syntax feedback, and print out errors in syntax
@@ -294,9 +514,8 @@ def syntaxCheck(tokens, labelAddr, addrData, symbolVal, forAddr):
     global regRegInstr
     global regImmedInstr
 
-    num_warnings = 0
-    num_errors = 0
-    currentAddress = 0
+    warningsCount = 0
+    errorCount = 0
 
     # used as flags for if an assembly section is present and valid
     validCodeSect = 0
@@ -307,273 +526,32 @@ def syntaxCheck(tokens, labelAddr, addrData, symbolVal, forAddr):
     (codeSectStart, codeSectEnd, validCodeSect) = isSectionValid("code", validCodeSect, tokens)
     # Check is data section exists
     (dataSectStart, dataSectEnd, validDataSect) = isSectionValid("data", validDataSect, tokens)
-
     # Check is const section exists
     (constSectStart, constSectEnd, validConstSect) = isSectionValid("const", validConstSect, tokens)
 
-    # Checks that data section is valid
-    if validCodeSect != 2:
-        print("ERROR: No valid code section")
-        num_errors += 1
-    # Creates syntax checker for the code section
-    else: codeChecker = Parser(tokens[codeSectStart + 1:codeSectEnd])
-
-    if validDataSect != 2:
-        print("ERROR: No valid data section")
-        num_errors += 1
-    # Creates syntax checker for data section
-    else: dataChecker = Parser(tokens[dataSectStart + 1: dataSectEnd])
-
-    # Checks that the const section is valid
-    if validConstSect != 2:
-        print("ERROR: No valid const section")
-        num_errors += 1
-    # Creates syntax checker for const section
-    else: constChecker = Parser(tokens[constSectStart + 1: constSectEnd])
-
     # Only check the syntax if the const section exists
     if validConstSect == 2:
-        while len(constChecker.tokens):
-            token = constChecker.peek()
-            if token == "let":
-                param1 = constChecker.peek(1)
-                param2 = constChecker.peek(2)
-                param3 = constChecker.peek(3)
-
-
-                if token in symbolVal:
-                    print(f"Warning: assigning data to an symbol address that has already been assigned: {token}")
-                    constChecker.consume(3)
-                    continue
-
-                if param1[0].isnumeric():
-                    print(f"ERROR: start of symbol can not be a number: {param1}")
-                constChecker.consume(1)
-
-                if param2 != "=":
-                    print(f"ERROR: Expected =, got: {token} *{param1}* {param2}")
-                constChecker.consume()
-
-                if param3[0:2] == "0x":
-                    if int(param3, 16) > int("0xFFFF", 16) or int(param3, 16) < int("0x0000", 16):
-                        print(f"ERROR: memory address must be between 0x0000 and 0xFFFF: {token} ")
-                        num_errors += 1
-                constChecker.consume()
-                constChecker.consume()
-
-                symbolVal[param1] = param3
-            else:
-                print(f"ERROR: Assignment must start with 'let': {token}")
-                constChecker.consume(3)
+        errorCount += syntaxCheckConst(tokens, constSectStart, constSectEnd, symbolVal)
     else:
-        print("No Valid const section")
+        print("Warning: No valid const section")
+        warningsCount += 1
 
     # syntax checking for code section
     if validCodeSect == 2:
-        forLoopCount = 0
-        endForLoopCount = 0
-        while len(codeChecker.tokens):
-            token = codeChecker.peek()
-            # Label Handling
-            if token[0] == "@":
-                if token in labelAddr:
-                    print("ERROR: reassignment of label attempted: {token}")
-                    num_errors += 1
-                else: labelAddr[token] = currentAddress
-                codeChecker.consume()
-                continue
-
-            # REGREG Instructions
-            elif token in regRegInstr:
-                codeChecker.consume()
-                currentAddress += 1
-                param1 = codeChecker.peek()
-                param2 = codeChecker.peek(1)
-                codeChecker.consume(2)
-                if param1 not in reg:
-                    print(f"ERROR: expected a register {token} {param1} {param2}")
-                    num_errors += 1
-
-                # expects two registers as arguments
-                if param2 not in reg:
-                    print(f"ERROR: expected a register {token} {param1} {param2}")
-                    num_errors += 1
-                continue
-
-            # REGIMM Instructions
-            elif token in regImmedInstr:
-                codeChecker.consume()
-                currentAddress += 1
-                param1 = codeChecker.peek()
-                param2 = codeChecker.peek(1)
-                if param1 not in reg:
-                    print(f"ERROR: expected a register {token} *{param1}* {param2}")
-                    num_errors += 1
-                codeChecker.consume()
-
-                if param2[0] != "#":
-                    print(f"ERROR: immediate needs to be #(val): {token} {param1} *{param2}*")
-                    num_errors += 1
-
-                if int(param2[1::]) > 31 or int(param2[1::]) < 0:
-                    print(f"ERROR: Immediate value needs to be between 0 and 31: {token} {param1} *#{param2[1::]}*")
-                    num_errors += 1
-                codeChecker.consume()
-                continue
-
-            # MEM Instructions
-            elif token in memInstr:
-                codeChecker.consume()
-                currentAddress += 2
-                param1 = codeChecker.peek()
-                param2 = codeChecker.peek(1)
-                param3 = codeChecker.peek(2)
-                if param1 not in reg:
-                    print(f"ERROR: expected a register {token} *{param1}* {param2} {param3}")
-                    i = i + 1
-                    num_errors += 1
-                codeChecker.consume()
-
-                if param2 not in reg:
-                    print(f"ERROR: expected a register {token} {param1} *{param2}* {param3}")
-                    num_errors += 1
-                codeChecker.consume()
-
-                if int(param3, 16) > int("0xFFFF", 16) or int(param3, 16) < int("0x0000", 16):
-                    print(
-                        f"ERROR: memory address must be between 0x0000 and 0xFFFF: {token} {param1} {param2} *{param3}*")
-                    num_errors += 1
-                codeChecker.consume()
-                continue
-
-            # Jump instructions
-            elif token in jumpInstr:
-                codeChecker.consume()
-                currentAddress += 2
-                param1 = codeChecker.peek()
-                param2 = codeChecker.peek(1)
-                if param1 not in reg:
-                    print(f"ERROR: expected a register {token} *{param1}* {param2}")
-                    num_errors += 1
-                codeChecker.consume()
-
-                param2 = "@" + param2
-                # Remove this temporarily because it does not allow forward jumps due to the label not being parsed yet
-                # if param2 not in labelAddr:
-                #     print(f"ERROR: label needs to exist to jump to it: {token} {param1} *{param2}*")
-                #     num_errors += 1
-                codeChecker.consume()
-                continue
-
-            elif token in callInstr:
-                if token == "ret":
-                    codeChecker.consume()
-                    continue
-                codeChecker.consume()
-                currentAddress += 2
-                param1 = codeChecker.peek()
-                param2 = codeChecker.peek(1)
-                if param1 not in reg:
-                    print(f"ERROR: expected a register {token} *{param1}* {param2}")
-                    num_errors += 1
-                codeChecker.consume()
-                codeChecker.consume()
-                continue
-
-            elif token == "for":
-                codeChecker.consume()
-                param1 = codeChecker.peek()
-                param2 = codeChecker.peek(1)
-                param3 = codeChecker.peek(2)
-
-                if param1 not in reg:
-                    print(f"ERROR: register needs to be assigned as iterator: {token} *{param1}* {param2} {param3}")
-                    num_errors += 1
-                codeChecker.consume()
-
-                if param2 != "=":
-                    print(f"ERROR: invalid token, needs to be = : {token} {param1} *{param2}* {param3}")
-                    num_errors += 1
-                codeChecker.consume()
-
-                if int(param3) > 31 or int(param3) < 0:
-                    print(f"ERROR: iterator initial value must be between 0 and 31: {token} {param1} {param2} *{param3}*")
-                    num_errors += 1
-                codeChecker.consume()
-                currentAddress += 1
-                forAddr[token + str(forLoopCount)] = currentAddress
-                forLoopCount += 1
-                continue
-
-            elif token == "endfor":
-                codeChecker.consume()
-                param1 = codeChecker.peek()
-                param2 = codeChecker.peek(1)
-                param3 = codeChecker.peek(2)
-                if param1 not in reg:
-                    print(f"ERROR: register needs to be assigned as iterator: {token} *{param1}* {param2} {param3}")
-                    num_errors += 1
-                codeChecker.consume()
-
-                if param2 != "<":
-                    print(f"ERROR: invalid token, comparison can only be less than for now: {token} {param1} *{param2}* {param3}")
-                    num_errors += 1
-                codeChecker.consume()
-
-                if int(param3) < 0 or int(param3) > 31:
-                    print(f"ERROR: iterator initial value must be between 0 and 31: {token} {param1} {param2} *{param3}*")
-                    num_errors += 1
-                codeChecker.consume()
-                currentAddress += 3
-                endForLoopCount += 1
-                continue
-
-
-            else:
-                num_errors += 1
-                print(f"Invalid token: {token}")
-                codeChecker.consume()
-
+        errorCount += syntaxCheckCode(tokens, codeSectStart, codeSectEnd, labelAddr, forAddr)
     else:
-        print(f"No valid code section {validCodeSect}")
-
-    # if forLoopCount != endForLoopCount: quit("Syntax Error: number of for and endfor are not equal")
+        print("No valid code section")
+        errorCount += 1
 
     # Syntax checking for the data section
     if validDataSect == 2:
-        while len(dataChecker.tokens):
-            token = dataChecker.peek()
-
-            if token[0:2] == "0x":
-                if token in addrData:
-                    print(f"Warning: assigning data to an address that has already been assigned: {token}")
-                    dataChecker.consume(3)
-                    continue
-                param1 = dataChecker.peek(1)
-                param2 = dataChecker.peek(2)
-                if int(token, 16) > int("0xFFFF", 16) or int(token, 16) < int("0x0000", 16):
-                    print(f"ERROR: memory address must be between 0x0000 and 0xFFFF: {token} ")
-                    num_errors += 1
-                dataChecker.consume()
-
-                if param1 != "=":
-                    print(f"ERROR: Expected =, got: {token} *{param1}* {param2}")
-                dataChecker.consume()
-
-                if int(param2, 16) > int("0xFFFF", 16) or int(param2, 16) < int("0x0000", 16):
-                    print(f"ERROR: memory address must be between 0x0000 and 0xFFFF: {token} ")
-                    num_errors += 1
-                dataChecker.consume()
-                addrData[token] = param2
-                continue
-            else:
-                print(f"ERROR: invalid token {token}")
-                dataChecker.consume(3)
+        errorCount += syntaxCheckData(tokens, dataSectStart, dataSectEnd, addrData)
     else:
         print("No valid data section")
+        warningsCount += 1
 
     # syntax checking for data section
-    return num_errors, num_warnings
+    return errorCount, warningsCount
 
 
 def isSectionValid(section, section_flag, tokens):
@@ -600,45 +578,45 @@ def twosComp(val, bits):
 
 
 def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
-    codeParser = Parser(tokens[tokens.index(".code") + 1:tokens.index(".endcode")])
+    p = Parser(tokens[tokens.index(".code") + 1:tokens.index(".endcode")])
     currAddr = startAddr
     tlatedTokens = ''
     forLoopCount = 0
-    while len(codeParser.tokens):
-        token = codeParser.peek()
+    while len(p.tokens):
+        token = p.peek()
 
         machineCode = ""
         # Translate regreg instructions
 
         if token[0] == "@":
-            codeParser.consume()
+            p.consume()
             continue
 
         if token in regRegInstr:
             machineCode += regRegInstr[token]
-            machineCode += reg[codeParser.peek(1)]
-            machineCode += reg[codeParser.peek(2)]
-            tlatedTokens += f"{currAddr}:{machineCode}; % {token} {codeParser.peek(1)} {codeParser.peek(2)} % \n"
-            codeParser.consume(3)
+            machineCode += reg[p.peek(1)]
+            machineCode += reg[p.peek(2)]
+            tlatedTokens += f"{currAddr}:{machineCode}; % {token} {p.peek(1)} {p.peek(2)} % \n"
+            p.consume(3)
             currAddr += 1
             continue
         elif token in regImmedInstr:
             machineCode += regImmedInstr[token]
-            machineCode += reg[codeParser.peek(1)]
-            machineCode += bin(int(codeParser.peek(2)[1::]))[2::].zfill(5)  # Kinda gross lmao, but it works
-            tlatedTokens += f"{currAddr}:{machineCode}; % {token} {codeParser.peek(1)} {codeParser.peek(2)} % \n"
-            codeParser.consume(3)
+            machineCode += reg[p.peek(1)]
+            machineCode += bin(int(p.peek(2)[1::]))[2::].zfill(5)  # Kinda gross lmao, but it works
+            tlatedTokens += f"{currAddr}:{machineCode}; % {token} {p.peek(1)} {p.peek(2)} % \n"
+            p.consume(3)
             currAddr += 1
             continue
         elif token in jumpInstr:
             machineCode += jumpInstr[token]
-            currReg = codeParser.peek(1)
+            currReg = p.peek(1)
             machineCode = machineCode.replace("*", reg[currReg])
-            tlatedTokens += f"{currAddr}:{machineCode}; % {token} {codeParser.peek(1)} % \n"
+            tlatedTokens += f"{currAddr}:{machineCode}; % {token} {p.peek(1)} % \n"
             currAddr += 1
-            codeParser.consume(2)
+            p.consume(2)
 
-            jAddr = labelAddr["@" + codeParser.peek()]
+            jAddr = labelAddr["@" + p.peek()]
             # Handles Different jumping modes
             # TODO: Implement the rest of jumping modes
             if currReg == "r1":
@@ -646,21 +624,21 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
                     jumpVal = twosComp(currAddr - jAddr + 1, 16)
                 else:
                     jumpVal = jAddr - currAddr - 1
-                tlatedTokens += f"{currAddr}:{bin(jumpVal)[1::].zfill(16)[2::]}; % {codeParser.peek()} % \n"
-                codeParser.consume()
+                tlatedTokens += f"{currAddr}:{bin(jumpVal)[1::].zfill(16)[2::]}; % {p.peek()} % \n"
+                p.consume()
 
             currAddr += 1
             continue
 
         elif token in memInstr:
             machineCode += memInstr[token]
-            machineCode += reg[codeParser.peek(1)]
-            machineCode += reg[codeParser.peek(2)]
-            tlatedTokens += f"{currAddr}:{machineCode}; % {token} {codeParser.peek(1)} {codeParser.peek(2)} % \n"
-            codeParser.consume(3)
+            machineCode += reg[p.peek(1)]
+            machineCode += reg[p.peek(2)]
+            tlatedTokens += f"{currAddr}:{machineCode}; % {token} {p.peek(1)} {p.peek(2)} % \n"
+            p.consume(3)
 
             currAddr += 1
-            addr = codeParser.peek()
+            addr = p.peek()
             if addr in symbolVal:
                 # TODO: check to see if memeory symbol is in the const section
                 print("Not implemented")
@@ -668,7 +646,7 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
                 # tlatedTokens += f"{currAddr}:{symbolVal[addr]}"
             else:
                 tlatedTokens += f"{currAddr}:{bin(int(addr, 16))[2::].zfill(16)}; % {addr} % \n"
-            codeParser.consume()
+            p.consume()
             currAddr += 1
             continue
 
@@ -676,47 +654,46 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
             if token == "ret":
                 zero = "0"
                 tlatedTokens += f"{currAddr}:{callInstr[token].ljust(16, zero)}; % {token} % \n"
-                codeParser.consume()
+                p.consume()
                 currAddr += 1
                 continue
             machineCode += callInstr[token]
-            currReg = codeParser.peek(1)
+            currReg = p.peek(1)
             machineCode += reg[currReg]
             machineCode += "00000"
-            tlatedTokens += f"{currAddr}:{machineCode}; % {token} {codeParser.peek(1)} {codeParser.peek(2)} % \n"
+            tlatedTokens += f"{currAddr}:{machineCode}; % {token} {p.peek(1)} {p.peek(2)} % \n"
             currAddr += 1
-            codeParser.consume(2)
+            p.consume(2)
 
-            jAddr = labelAddr["@" + codeParser.peek()]
+            jAddr = labelAddr["@" + p.peek()]
             if currReg == "r1":
                 if currAddr > jAddr:
                     jumpVal = twosComp(currAddr - jAddr + 1, 16)
                 else:
                     jumpVal = jAddr - currAddr - 1
-                tlatedTokens += f"{currAddr}:{bin(jumpVal)[2::].zfill(16)}; % {codeParser.peek()} % \n"
-                codeParser.consume()
+                tlatedTokens += f"{currAddr}:{bin(jumpVal)[2::].zfill(16)}; % {p.peek()} % \n"
+                p.consume()
             currAddr += 1
             continue
 
-
         elif token == "for":
             machineCode += regRegInstr["sub"]
-            machineCode += reg[codeParser.peek(1)]
-            machineCode += reg[codeParser.peek(1)]
+            machineCode += reg[p.peek(1)]
+            machineCode += reg[p.peek(1)]
             # TODO: Add support for different starting value for a for loop
             # Adds the instruction to clear the iterator register
-            tlatedTokens += f"{currAddr}:{machineCode}; % {token}{forLoopCount} {codeParser.peek(1)} {codeParser.peek(3)} % \n"
+            tlatedTokens += f"{currAddr}:{machineCode}; % {token}{forLoopCount} {p.peek(1)} {p.peek(3)} % \n"
             forLoopCount += 1
             currAddr += 1
-            codeParser.consume(4)
+            p.consume(4)
             continue
 
         elif token == "endfor":
             machineCode += regImmedInstr["cmp"]
-            machineCode += reg[codeParser.peek(1)]
-            machineCode += bin(int(codeParser.peek(3)))[2::].zfill(5)
+            machineCode += reg[p.peek(1)]
+            machineCode += bin(int(p.peek(3)))[2::].zfill(5)
             # Adds the compare instruciton to the mif file
-            tlatedTokens += f"{currAddr}:{machineCode}; % cmp {codeParser.peek(1)} {codeParser.peek(3)} % \n"
+            tlatedTokens += f"{currAddr}:{machineCode}; % cmp {p.peek(1)} {p.peek(3)} % \n"
 
             currAddr += 1
             # Add the jump instruction to the mif file
@@ -730,24 +707,12 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
             tlatedTokens += f"{currAddr}:{jAddrBin}; % offset to jump to for{forLoopCount - 1} % \n"
             currAddr += 1
             forLoopCount -= 1
-            codeParser.consume(4)
+            p.consume(4)
             continue
         else:
-            codeParser.consume()
+            p.consume()
             print(token)
     tlatedTokens += f"[{currAddr} .. {endAddr - 1}] : 11111111111111; %EMPTY MEMORY LOCATIONS % \n"
-
-    return tlatedTokens
-
-
-# TODO: Refactor this
-def writeMifFile(filepath, tokens, labelAddr, addrData, symbolVal, startingAddress, nextStartingAddress = "16383"):
-    # Write to the mif file as one large string
-    tlatedTokens = ""
-
-
-
-    tlatedTokens += translateCode(tokens, symbolVal, labelAddr, startingAddress, nextStartingAddress)
 
     return tlatedTokens
 
