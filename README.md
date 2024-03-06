@@ -1,6 +1,9 @@
 # ATDCS_Assembler
  Translation from a custom RISC ISA to machine code to run on the CPU found at this repo:
 
+# Usage
+- to use from the command line, move to the src directory and run the following command: python3 assembler.py -M Test1.asm Test2.asm
+
 
 
 # Syntax and Semantics
