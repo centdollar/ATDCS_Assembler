@@ -37,3 +37,19 @@ Assuming that the syntax check returns with no errors, the tokens are passed to 
 
 #### Outputs:
 - MIF File
+
+
+
+## More Details:
+#### Tokenization: 
+The tokenizer will create tokens using whitespace as the delimiter. Below are examples of tokens that will be produced.
+- "Hello, World!" - > 2 tokens begin "Hello," and "World!"
+
+#### Syntax Checking:
+The syntax checking will compare the tokens that are generated from the tokenization stage to the valid tokens in the language. These valid tokens can be found in the InstrTranslation.py file. These tokens must also be used when writing your own assembly code to be compiled.
+
+#### Translation:
+The translation phase will only run if the syntax check returns with no errors. This function will do a 1 to 1 substitution for the valid token to its corresponding machine code. More information about the translation and ISA of the CPU can be found in the git repo for the CPU. One examples is shown below.
+- add r1 r1 -> 1010000000100001
+- (This will add the value in register 1 with itself and store the resultant in register 1)
+- In this example, the add instruction is translated to the value 101000 and then the resgisters are translated to 00001
