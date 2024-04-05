@@ -1,17 +1,20 @@
 # Principles of Computing Create Project
-### Project Choice
+## Project Choice
 The project I chose to develop was an assembler for a custom RISC CPU architecture that was developed in EEEE-721 (Advanced Topics of Digital Computer Systems). The assembler is needed because it will translate assembly instructions into machine code for the CPU to use for execution.
 
 ### Useful Links:
 - Assemblers      -> https://en.wikipedia.org/wiki/Assembly_language#Assembler
 - CPUS            -> https://computersciencewiki.org/index.php/Architecture_of_the_central_processing_unit_(CPU)
-- Tokenization ->                                                                                
+- Tokenization ->     https://www.cs.man.ac.uk/~pjj/farrell/comp3.html#:~:text=The%20tokenizer%20is%20responsible%20for,understanding%20of%20the%20language's%20grammar.                                  
 - Syntax          -> https://en.wikipedia.org/wiki/Syntax_(programming_languages)
-- CPU git ->
-- Assembler git ->
+- CPU git -> https://github.com/centdollar/DCS
+- Assembler git -> https://github.com/centdollar/ATDCS_Assembler/tree/PrinciplesOfComputing-CreateProject
+
+### Notes:
+- On the assembler git repo, their is a main branch which requires the code to be run through the command line using arguments to pass input files. If you end up on the git repo, make sure you are on the PrinciplesOfComputing-CreateProject Branch
 
 
-### How to use the program:
+## How to use the program:
 #### PyCharm:
 To use Pycharm with this project, navigate to the src folder in the directory view on the left side. Then click on assembler.py and click the run button for the python program. This will then display a selection menu which the user inputs what they wish to do in the terminal at the bottom of the screen. The Compile seciton will bring the user to the list of test cases that can be ran to see that the assembler works. There is also an option to use a custom assembly file which the user can change to see the assembler work on your own written code.
 
