@@ -12,6 +12,7 @@ The project I chose to develop was an assembler for a custom RISC CPU architectu
 
 ### Notes:
 - On the assembler git repo, their is a main branch which requires the code to be run through the command line using arguments to pass input files. If you end up on the git repo, make sure you are on the PrinciplesOfComputing-CreateProject Branch
+- When looking through the code base, I reccomend folding all functions and looking at the main function and then the Multiprogram function inside of the MultiProgramAssembler Class. If you want to learn more about how the individual functions work unfold them and take a look one at a time to not get overwhelmed. Also if you have any questions, feel free to reach out to me and I am more than happy to help. My school email can be found in the classlist and just put the subject line as Principles of Computing Assembler questions, or something like that.
 
 
 ## How to use the program:
