@@ -3,3 +3,4 @@ MifFiles/
 .idea/
 TestCases/Project5.asm
 TestCases/TSM.asm
+src/__pycache__

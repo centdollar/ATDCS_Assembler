@@ -1,221 +1,58 @@
+'''----------------------------------------------------------------------------------------------------------
+|   Principles Of Computing: Create Project
+|   Created by: Vincent Michelini, EE
+|   
+|
+|   Project:    The goal of this project was to create an assembler which compiles assembly code into machine code.
+|               Machine code is read by a CPU in computers and encodes the actual instructions that are ran on the physical hardware.
+|
+|   Program Flow:   
+|       Inputs: Assembly files (contain the code written in assembly)
+|       Outputs: A mif file with the compiled assembly files in machine code
+|
+|       Input Files -> Tokenize -> Syntax Checked -> Translation -> Output File (.mif)
+|
+|       Tokenize:   The tokenization phase reads the input files and breaks them up into individual token, in this project
+|                   a token is any string inbetween two whitespace characters (" "). This is done using a Lexer object.
+|
+|       Syntax Check:   The tokens from the previous function are then sent through a function that checks the tokens to make sure they 
+|                       are valid in our custom assembly language. More information about this can be found in the README.
+|
+|       Translation:    This stage is ran if the syntax check came back error free. This takes the tokens and generate a mif file with the
+|                       machine code in it. The translation dictionaries can be found in the include file (___). This dictionary maps the valid
+|                       token to its binary representation following the ISA.
+|
+|   Useful Links:   Assemblers      -> https://en.wikipedia.org/wiki/Assembly_language#Assembler
+|                   CPUS            -> https://computersciencewiki.org/index.php/Architecture_of_the_central_processing_unit_(CPU)
+|                   Tokenization    -> 
+|                   Syntax          -> https://en.wikipedia.org/wiki/Syntax_(programming_languages) 
++------------------------------------------------------------------------------------------------------------'''
+# Importing some common packages
 import sys
 import math
+
+# Importing the Instruciton Translation dictionaries from another python file
+import InstrTranslation 
+
+# Lexer Class to Tokenize the assembly file
+import Lexer
+
+# Parser Class to help with iterating the token lists
+import Parser
+
+regRegInstr     = InstrTranslation.regRegInstr        # putting the dict from the import into a local variable
+regImmedInstr   = InstrTranslation.regImmedInstr
+callInstr       = InstrTranslation.callInstr
+jumpInstr       = InstrTranslation.jumpInstr
+memInstr        = InstrTranslation.memInstr
+reg             = InstrTranslation.reg
 
 dir_path = "../TestCases/"
 output_dir = "../../DCS/simulation/modelsim/"
 localOutput_dir = "../MifFiles/"
 mifFileHeader = "WIDTH = 16;\nDEPTH = 16384;\nADDRESS_RADIX = DEC;\nDATA_RADIX = BIN;\n\n\nCONTENT BEGIN\n"
 
-# -------------------------------- INSTRUCTION -> Machine Code Dicts -------------------------------------
-regRegInstr = {
-    'in': '100000',
-    'out': '100001',
-    'cmpr': '110101',
 
-    'swp': '100010',
-    'cpy': '100011',
-
-    'add': '101000',
-    'sub': '101001',
-    'mul': '101010',
-    'div': '101011',
-
-    'xor': '100100',
-    'and': '100101',
-    'or': '100110',
-    'not': '100111',
-
-    'fadd': '001000',
-    'fsub': '001001',
-    'fmul': '001010',
-    'fdiv': '001011',
-
-    'vadd': '110000',
-    'vsub': '110001',
-    'vmul': '110010',
-    'vdiv': '110011'
-}
-
-regImmedInstr = {
-    'cmpc': '010000',
-
-    'srl': '010001',
-    'sra': '010010',
-    'rotl': '010011',
-    'rotr': '010100',
-
-    'addc': '010101',
-    'subc': '010110',
-
-    'rrc': '011000',
-    'rrn': '011001',
-    'rrz': '011010',
-
-    'rln': '011100',
-    'rlz': '011101'
-}
-
-jumpInstr = {
-    'ju': '000100*00000',
-    'jc1': '000100*10000',
-    'jn1': '000100*01000',
-    'jv1': '000100*00100',
-    'jz1': '000100*00010',
-    'jc0': '000100*01110',
-    'jn0': '000100*10110',
-    'jv0': '000100*11010',
-    'jz0': '000100*11100'
-}
-
-callInstr = {
-    'call': '111110',
-    'ret': '111101'
-}
-
-memInstr = {
-    'ld': '000000',
-    'st': '000001',
-    'lds' : '000010',
-    'sts' : '000011'
-}
-
-reg = {'r0': '00000', 'r1': '00001', 'r2': '00010', 'r3': '00011', 'r4': '00100', 'r5': '00101', 'r6': '00110',
-       'r7': '00111',
-       'r8': '01000', 'r9': '01001', 'r10': '01010', 'r11': '01011', 'r12': '01100', 'r13': '01101', 'r14': '01110',
-       'r15': '01111',
-       'r16': '10000', 'r17': '10001', 'r18': '10010', 'r19': '10011', 'r20': '10100', 'r21': '10101', 'r22': '10110',
-       'r23': '10111',
-       'r24': '11000', 'r25': '11001', 'r26': '11010', 'r27': '11011', 'r28': '11100', 'r29': '11101', 'r30': '11110',
-       'r31': '11111'}
-
-# ------------------------------------------------------------------------------------------------------
-
-
-# Lexer Class to Tokenize the assembly file
-class Lexer:
-    def __init__(self, content):
-        self.content = content
-
-    content = ""
-
-    # Trims white space to the left
-    def trim_left(self):
-        while len(self.content) != 0 and self.content[0].isspace():
-            self.content = self.content[1::]
-
-    def chopWhileNotEOL(self):
-        while len(self.content) != 0 and self.content[0] != "\n":
-            self.content = self.content[1::]
-        self.content = self.content[1::]
-
-    # chop the array n elements from the left
-    def chop(self, n):
-        token = self.content[0:n]
-        self.content = self.content[n::]
-        return token
-
-    def chopWhileAlphaNum(self):
-        n = 0
-        while n < len(self.content) and self.content[n].isalnum():
-            n += 1
-        return self.chop(n)
-
-    def chopWhileNum(self):
-        n = 0
-        while n < len(self.content) and self.content[n].isnumeric():
-            n += 1
-        return self.chop(n)
-
-    def chopWileNotEndBrace(self):
-        n = 0
-        while n < len(self.content) and self.content[n] != "]":
-            n += 1
-        rVal = self.chop(n)
-        self.chop(1)
-        return rVal
-
-    def chopWhileDotAlpha(self):
-        n = 0
-        if n < len(self.content) and self.content[n] == ".":
-            n += 1
-        while n < len(self.content) and self.content[n].isalpha() and self.content[n] != "\n":
-            n += 1
-        return self.chop(n)
-
-    def chopWhileEqual(self):
-        n = 0
-        while n < len(self.content) and self.content[n] == "=":
-            n += 1
-        return self.chop(n)
-
-    def chopWhileLessThan(self):
-        n = 0
-        while n < len(self.content) and self.content[n] == "<":
-            n += 1
-        return self.chop(n)
-
-
-    def nextToken(self):
-        # trim the whitespace 
-        self.trim_left()
-        if self.content[0:2] == "//":
-            self.chopWhileNotEOL()
-        self.trim_left()
-
-        if len(self.content) == 0:
-            return None
-
-        elif self.content[0] == "m" and self.content[1] == "[":
-            if self.content[2:4] == "0x":
-                self.content = self.content[2:8] + self.content[9::]
-                return self.chopWhileAlphaNum()
-            else:
-                self.content = self.content[2::]
-                return self.chopWileNotEndBrace()
-
-        elif self.content[0:2] == "0x":
-            return self.chopWhileAlphaNum()
-
-        elif self.content[0] == "=":
-            return self.chopWhileEqual()
-
-        elif self.content[0] == "<":
-            return self.chopWhileLessThan()
-
-        elif self.content[0] == ".":
-            return self.chopWhileDotAlpha()
-
-        elif self.content[0] == "#":
-            self.content = self.content[1::]
-            return "#" + self.chopWhileNum()
-
-        elif self.content[0] == "@":
-            self.content = self.content[1::]
-            return "@" + self.chopWhileAlphaNum()
-        elif self.content[0].isalpha():
-            return self.chopWhileAlphaNum()
-
-        elif self.content[0].isnumeric():
-            return self.chopWhileNum()
-
-        else:
-            print(f"Reached invalid token: {self.content}")
-
-
-# Parser Class to help with iterating the token lists
-class Parser:
-    def __init__(self, tokens):
-        self.tokens = tokens
-
-    tokens = []
-
-    # Look ahead n tokens and return its value
-    def peek(self, n=0):
-        return self.tokens[n]
-
-    # Consume n tokens and shrink the tokens list
-    def consume(self, n=1):
-        self.tokens = self.tokens[n::]
 
 
 class MultiProgramAssembler:
@@ -268,10 +105,6 @@ class MultiProgramAssembler:
 '''
 TODO:   REFACTOR THINGS 
 TODO:   Create an assembly file class, but keep in mind that need to be able to multi-program
-TODO:   Move the jump calculations into a separate step
-            - just store the labels in an array instead of the dict and compare against that 
-            - this will allow for more addons to be done
-            - 
 TODO:   Make output files not overlap, check to see if exists then do like (x).mif
 TODO:   Implement an AST ..... someday
 TODO:   Implement an include system for functions? 
@@ -281,37 +114,49 @@ TODO:   Implement an include system for functions?
 MAX_MEMORY_ADDR = 2**16 - 1
 
 def main():
-    # Needs to be populated in order of programs memory space [start of P1, end of P1, start of P2 ...]
-    # memoryMap = [0, 1000, 2000, MAX_MEMORY_ADDR]
-    # TODO: Check to make sure the memory map supports the number of files input for multi-programming
-    # memoryMap = [0, 255, 256, 511, 512, MAX_MEMORY_ADDR]
-    memoryMap = [0, MAX_MEMORY_ADDR]
+    menuPrint("Make a selection", ["Compile", "Help", "Quit"])          # Print the menu
     
-    files = []
-    if len(sys.argv) == 1:
-        quit("Usage: python3 assembler.py [-h -M] [files]")
-    if sys.argv[1] == "-h":
-        quit("-h : prints the help screen\n-M [MemoryMap file] [files] : combines assembly files for "
-             "multi-programing, expects 1 or more input files")
-    elif sys.argv[1] == "-M":
-        for i in range(2, len(sys.argv)):
-            files.append(sys.argv[i])
-        mp = MultiProgramAssembler(files, memoryMap)
-        mp.Multiprogram()
-    else:
-        quit("Usage: python3 assembler.py [-h -M] [files]")
+    # Wait until a user input is a valid selection
+    userSelection = int(input())
+    while(userSelection < 1 or userSelection > 3):
+        print(f"Pick a valid option: not {userSelection}")
+        userSelection = int(input())
+    
+    menuSelect = userSelection
+    if(menuSelect== 1):                 # Select the correct menu choice
+        compileSelection = ["Addition", " ", " ", "", "Custom Assembly"]
+        menuPrint("Which test which you like to run", compileSelection)
+
+        userSelection = int(input())
+        while(userSelection < 1 or userSelection > 7):
+            print(f"Pick a valid option: not {userSelection}")
+            userSelection = int(input())
+
+        if userSelection == 1:
+            testFile = compileSelection[userSelection - 1] + ".asm"
+            fileList = [testFile]
+            memoryMap = [0, MAX_MEMORY_ADDR]
+            mp = MultiProgramAssembler(fileList, memoryMap)
+            mp.Multiprogram()
 
 # ------------------------------------------------ Function Declarations -------------------------------
+def menuPrint(title, selections):
+    fill = "-"
+    print(f"+{30*fill}+")
+    for i in range(len(selections)):
+        print(f"|{i+1:>3}. {selections[i]:25}|")
+    print(f"+{30*fill}+")
 # tokenize(file)
 #   file - path of the file to tokenize
 # returns tokens[]
+# TODO: Interesting bug where if a file does not exist a output is generated
 def tokenize(file):
     tokens = []
     with open(dir_path + file, "r") as f:
         # Read the file into a string
         F = f.read()
     # Create a lexer with the contents of the asm file
-    lexer = Lexer(F)
+    lexer = Lexer.Lexer(F)
     # Create tokens until none remain
     while 1:
         token = lexer.nextToken()
@@ -323,7 +168,7 @@ def tokenize(file):
 
 
 def syntaxCheckConst(tokens, start, end, symbolVal):
-    p = Parser(tokens[start + 1: end])
+    p = Parser.Parser(tokens[start + 1: end])
     numErrors = 0
     while len(p.tokens):
         token = p.peek()
@@ -358,7 +203,7 @@ def syntaxCheckConst(tokens, start, end, symbolVal):
 
 
 def syntaxCheckCode(tokens, start, end, labelAddr, symbolAddr, forAddr):
-    p = Parser(tokens[start + 1:end])
+    p = Parser.Parser(tokens[start + 1:end])
     forLoopCount = 0
     currforLoopCount = 0
     endForLoopCount = 0
@@ -477,9 +322,6 @@ def syntaxCheckCode(tokens, start, end, labelAddr, symbolAddr, forAddr):
                 numErrors += 1
             p.consume(3)
             lastForPeekValue = [index for index, char in enumerate(p.tokens) if char == 'endfor']
-            print(lastForPeekValue)
-            print(forLoopCount)
-            print(forAddr)
             if (int(p.tokens[lastForPeekValue[currforLoopCount] + 3]) < 32):
                 forAddr[token + str(forLoopCount)] = currentAddress
                 currentAddress += 1
@@ -520,7 +362,7 @@ def syntaxCheckCode(tokens, start, end, labelAddr, symbolAddr, forAddr):
 
 
 def syntaxCheckData(tokens, start, end, addrData):
-    p = Parser(tokens[start + 1: end])
+    p = Parser.Parser(tokens[start + 1: end])
     errorCount = 0
     while len(p.tokens):
         token = p.peek()
@@ -628,12 +470,11 @@ def twosComp(val, bits):
 
 
 def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
-    p = Parser(tokens[tokens.index(".code") + 1:tokens.index(".endcode")])
+    p = Parser.Parser(tokens[tokens.index(".code") + 1:tokens.index(".endcode")])
     currAddr = startAddr
     tlatedTokens = ''
     forLoopCount = 0
     currforLoopCount = 0
-    print(p.tokens)
     while len(p.tokens):
         token = p.peek()
 
@@ -675,7 +516,6 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
             p.consume(2)
 
             jAddr = labelAddr["@" + p.peek()]
-            print(labelAddr)
             # Handles Different jumping modes
             # TODO: Implement the rest of jumping modes
 
@@ -688,10 +528,6 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
                     jumpVal = int(jAddr) - currAddr - 1
                     # No negative sign so slice starting at 2
                     jumpVal = bin(jumpVal)[2::].zfill(16)
-                print("---------------------")
-                print(currAddr)
-                print(jAddr)
-                print(twosComp(int(jumpVal, 2), 16) + 1)
                 tlatedTokens += f"{currAddr}:{jumpVal}; % {p.peek()} % \n"
                 p.consume()
 
@@ -751,7 +587,6 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
             currAddr += 1
             p.consume(4)
             machineCode = ""
-            print(forAddr)
 
             # Support for using register compare
             # TODO: Make it work with more than just powers of 2
@@ -759,7 +594,6 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
             #       Or support it through a load instruction 
             lastForPeekValue = [index for index, char in enumerate(p.tokens) if char == 'endfor']
             if (int(p.peek(lastForPeekValue[currforLoopCount] + 3)) > 31):
-                print("IN HERE")
                 machineCode += regRegInstr["sub"]
                 machineCode += reg["r29"]
                 machineCode += reg["r29"]
@@ -812,11 +646,6 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
             currAddr += 1
             jAddr = "for" + str(currforLoopCount - 1)
             jAddrBin = bin((twosComp((currAddr - startAddr) - (forAddr[jAddr]) + 1, 16)))[2::].zfill(16)[1::]
-            print("-------------------------")
-            print(jAddr)
-            print(forAddr[jAddr])
-            print(forLoopCount)
-            print(currAddr)
             print(twosComp(int(jAddrBin, 2), 16))
             tlatedTokens += f"{currAddr}:{jAddrBin}; % offset to jump to for{forLoopCount - 1} % \n"
             currAddr += 1
