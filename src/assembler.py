@@ -1,34 +1,33 @@
-'''----------------------------------------------------------------------------------------------------------
-|   Principles Of Computing: Create Project
-|   Created by: Vincent Michelini, EE
-|   
-|
-|   Project:    The goal of this project was to create an assembler which compiles assembly code into machine code.
-|               Machine code is read by a CPU in computers and encodes the actual instructions that are ran on the physical hardware.
-|
-|   Program Flow:   
-|       Inputs: Assembly files (contain the code written in assembly)
-|       Outputs: A mif file with the compiled assembly files in machine code
-|
-|       Input Files -> Tokenize -> Syntax Checked -> Translation -> Output File (.mif)
-|
-|       Tokenize:   The tokenization phase reads the input files and breaks them up into individual token, in this project
-|                   a token is any string inbetween two whitespace characters (" "). This is done using a Lexer object.
-|
-|       Syntax Check:   The tokens from the previous function are then sent through a function that checks the tokens to make sure they 
-|                       are valid in our custom assembly language. More information about this can be found in the README.
-|
-|       Translation:    This stage is ran if the syntax check came back error free. This takes the tokens and generate a mif file with the
-|                       machine code in it. The translation dictionaries can be found in the include file (___). This dictionary maps the valid
-|                       token to its binary representation following the ISA.
-|
-|   Useful Links:   Assemblers      -> https://en.wikipedia.org/wiki/Assembly_language#Assembler
-|                   CPUS            -> https://computersciencewiki.org/index.php/Architecture_of_the_central_processing_unit_(CPU)
-|                   Tokenization    -> 
-|                   Syntax          -> https://en.wikipedia.org/wiki/Syntax_(programming_languages) 
-+------------------------------------------------------------------------------------------------------------'''
+"""--------------------------------------------------------------------------------------------------------------------------------------------+
+|   Principles Of Computing: Create Project                                                                                                    |
+|   Created by: Vincent Michelini, EE                                                                                                          |
+|                                                                                                                                              |
+|                                                                                                                                              |
+|   Project:    The goal of this project was to create an assembler which compiles assembly code into machine code.                            |
+|               Machine code is read by a CPU in computers and encodes the actual instructions that are ran on the physical hardware.          |
+|                                                                                                                                              |
+|   Program Flow:                                                                                                                              |
+|       Inputs: Assembly files (contain the code written in assembly)                                                                          |
+|       Outputs: A mif file with the compiled assembly files in machine code                                                                   |
+|                                                                                                                                              |
+|       Input Files -> Tokenize -> Syntax Checked -> Translation -> Output File (.mif)                                                         |
+|                                                                                                                                              |
+|       Tokenize:   The tokenization phase reads the input files and breaks them up into individual token, in this project                     |
+|                   a token is any string inbetween two whitespace characters (" "). This is done using a Lexer object.                        |
+|                                                                                                                                              |
+|       Syntax Check:   The tokens from the previous function are then sent through a function that checks the tokens to make sure they        |
+|                       are valid in our custom assembly language. More information about this can be found in the README.                     |
+|                                                                                                                                              |
+|       Translation:    This stage is ran if the syntax check came back error free. This takes the tokens and generate a mif file with the     |
+|                       machine code in it. The translation dictionaries can be found in the include file (___). This dictionary maps the valid|
+|                       token to its binary representation following the ISA.                                                                  |
+|                                                                                                                                              |
+|   Useful Links:   Assemblers      -> https://en.wikipedia.org/wiki/Assembly_language#Assembler                                               |
+|                   CPUS            -> https://computersciencewiki.org/index.php/Architecture_of_the_central_processing_unit_(CPU)             |
+|                   Tokenization    ->                                                                                                         |
+|                   Syntax          -> https://en.wikipedia.org/wiki/Syntax_(programming_languages)                                            |
++----------------------------------------------------------------------------------------------------------------------------------------------+"""
 # Importing some common packages
-import sys
 import math
 
 # Importing the Instruciton Translation dictionaries from another python file
@@ -40,21 +39,27 @@ import Lexer
 # Parser Class to help with iterating the token lists
 import Parser
 
-regRegInstr     = InstrTranslation.regRegInstr        # putting the dict from the import into a local variable
-regImmedInstr   = InstrTranslation.regImmedInstr
-callInstr       = InstrTranslation.callInstr
-jumpInstr       = InstrTranslation.jumpInstr
-memInstr        = InstrTranslation.memInstr
-reg             = InstrTranslation.reg
+regRegInstr = InstrTranslation.regRegInstr        # putting the dict from the import into a local variable
+regImmedInstr = InstrTranslation.regImmedInstr
+callInstr = InstrTranslation.callInstr
+jumpInstr = InstrTranslation.jumpInstr
+memInstr = InstrTranslation.memInstr
+reg = InstrTranslation.reg
 
+# Assign the local output path of the assembled mif file
 dir_path = "../TestCases/"
-output_dir = "../../DCS/simulation/modelsim/"
+output_dir = "../MifFiles/"
 localOutput_dir = "../MifFiles/"
-mifFileHeader = "WIDTH = 16;\nDEPTH = 16384;\nADDRESS_RADIX = DEC;\nDATA_RADIX = BIN;\n\n\nCONTENT BEGIN\n"
+
+# Configuration
+ADDR_WIDTH = 16
+MAX_MEMORY_ADDR = 2**ADDR_WIDTH - 1
+
+# Constant Header information for the mif file
+mifFileHeader = f"WIDTH = {ADDR_WIDTH};\nDEPTH = {MAX_MEMORY_ADDR};\nADDRESS_RADIX = DEC;\nDATA_RADIX = BIN;\n\n\nCONTENT BEGIN\n"
 
 
-
-
+# This class handles assembling for single and multiple files
 class MultiProgramAssembler:
     def __init__(self, files, memoryMap):
         self.files = files
@@ -102,35 +107,24 @@ class MultiProgramAssembler:
         print("Data Mif File generated")
 
 
-'''
-TODO:   REFACTOR THINGS 
-TODO:   Create an assembly file class, but keep in mind that need to be able to multi-program
-TODO:   Make output files not overlap, check to see if exists then do like (x).mif
-TODO:   Implement an AST ..... someday
-TODO:   Implement an include system for functions? 
-            - could do parameter mapping to the CPU registers
-'''
-
-MAX_MEMORY_ADDR = 2**16 - 1
-
 def main():
     menuPrint("Make a selection", ["Compile", "Help", "Quit"])          # Print the menu
     
     # Wait until a user input is a valid selection
-    userSelection = int(input())
-    while(userSelection < 1 or userSelection > 3):
+    userSelection = int(input("|"))
+    while userSelection < 1 or userSelection > 3:
         print(f"Pick a valid option: not {userSelection}")
-        userSelection = int(input())
+        userSelection = int(input("|"))
     
     menuSelect = userSelection
-    if(menuSelect== 1):                 # Select the correct menu choice
-        compileSelection = ["Addition", " ", " ", "", "Custom Assembly"]
+    if menuSelect == 1:                 # Select the correct menu choice
+        compileSelection = ["Addition", "SyntaxError", " ", "", "Custom Assembly"]
         menuPrint("Which test which you like to run", compileSelection)
 
-        userSelection = int(input())
-        while(userSelection < 1 or userSelection > 7):
+        userSelection = int(input("|"))
+        while userSelection < 1 or userSelection > len(compileSelection):
             print(f"Pick a valid option: not {userSelection}")
-            userSelection = int(input())
+            userSelection = int(input("|"))
 
         if userSelection == 1:
             testFile = compileSelection[userSelection - 1] + ".asm"
@@ -139,13 +133,17 @@ def main():
             mp = MultiProgramAssembler(fileList, memoryMap)
             mp.Multiprogram()
 
+
 # ------------------------------------------------ Function Declarations -------------------------------
 def menuPrint(title, selections):
     fill = "-"
-    print(f"+{30*fill}+")
+    print(f"+{45*fill}+")
+    print(f"|{title:45}|")
     for i in range(len(selections)):
-        print(f"|{i+1:>3}. {selections[i]:25}|")
-    print(f"+{30*fill}+")
+        print(f"|{i+1:>3}. {selections[i]:40}|")
+    print(f"+{45*fill}+")
+
+
 # tokenize(file)
 #   file - path of the file to tokenize
 # returns tokens[]
@@ -207,7 +205,6 @@ def syntaxCheckCode(tokens, start, end, labelAddr, symbolAddr, forAddr):
     forLoopCount = 0
     currforLoopCount = 0
     endForLoopCount = 0
-    lastForPeekValue = 0
     numErrors = 0
     currentAddress = 0
     while len(p.tokens):
@@ -322,7 +319,7 @@ def syntaxCheckCode(tokens, start, end, labelAddr, symbolAddr, forAddr):
                 numErrors += 1
             p.consume(3)
             lastForPeekValue = [index for index, char in enumerate(p.tokens) if char == 'endfor']
-            if (int(p.tokens[lastForPeekValue[currforLoopCount] + 3]) < 32):
+            if int(p.tokens[lastForPeekValue[currforLoopCount] + 3]) < 32:
                 forAddr[token + str(forLoopCount)] = currentAddress
                 currentAddress += 1
             else:
@@ -345,7 +342,7 @@ def syntaxCheckCode(tokens, start, end, labelAddr, symbolAddr, forAddr):
                     f"ERROR: invalid token, comparison can only be less than for now: {token} {param1} *{param2}* {param3}")
                 numErrors += 1
 
-            if int(param3) < 0 or (int(param3) > 31 and int(param3) % 2) :
+            if int(param3) < 0 or (int(param3) > 31 and int(param3) % 2):
                 print(f"ERROR: iterator initial value must be between 0 and 31: {token} {param1} {param2} *{param3}*")
                 numErrors += 1
             p.consume(3)
@@ -440,7 +437,6 @@ def syntaxCheck(tokens, labelAddr, addrData, symbolVal, forAddr):
     else:
         print("No valid code section")
         errorCount += 1
-
 
     # syntax checking for data section
     return errorCount, warningsCount
@@ -593,7 +589,7 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
             #       Also make the compare register be choosable
             #       Or support it through a load instruction 
             lastForPeekValue = [index for index, char in enumerate(p.tokens) if char == 'endfor']
-            if (int(p.peek(lastForPeekValue[currforLoopCount] + 3)) > 31):
+            if int(p.peek(lastForPeekValue[currforLoopCount] + 3)) > 31:
                 machineCode += regRegInstr["sub"]
                 machineCode += reg["r29"]
                 machineCode += reg["r29"]
@@ -613,7 +609,6 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
                 machineCode += bin(int(math.log2(float(p.peek(lastForPeekValue[forLoopCount] + 3)))))[2::].zfill(5) 
                 tlatedTokens += f"{currAddr}:{machineCode}; % rotl r29 {int(math.log2(float(p.peek(lastForPeekValue[forLoopCount] + 3))))} % \n"
                 currAddr += 1
-                machineCode = ""
             forLoopCount += 1
             currforLoopCount += 1
             continue
@@ -646,7 +641,6 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
             currAddr += 1
             jAddr = "for" + str(currforLoopCount - 1)
             jAddrBin = bin((twosComp((currAddr - startAddr) - (forAddr[jAddr]) + 1, 16)))[2::].zfill(16)[1::]
-            print(twosComp(int(jAddrBin, 2), 16))
             tlatedTokens += f"{currAddr}:{jAddrBin}; % offset to jump to for{forLoopCount - 1} % \n"
             currAddr += 1
             currforLoopCount -= 1
