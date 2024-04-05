@@ -1,13 +1,16 @@
 import sys
+import math
 
 dir_path = "../TestCases/"
-output_dir = "../MifFiles/"
+output_dir = "../../DCS/simulation/modelsim/"
+localOutput_dir = "../MifFiles/"
 mifFileHeader = "WIDTH = 16;\nDEPTH = 16384;\nADDRESS_RADIX = DEC;\nDATA_RADIX = BIN;\n\n\nCONTENT BEGIN\n"
 
 # -------------------------------- INSTRUCTION -> Machine Code Dicts -------------------------------------
 regRegInstr = {
     'in': '100000',
     'out': '100001',
+    'cmpr': '110101',
 
     'swp': '100010',
     'cpy': '100011',
@@ -34,7 +37,7 @@ regRegInstr = {
 }
 
 regImmedInstr = {
-    'cmp': '010000',
+    'cmpc': '010000',
 
     'srl': '010001',
     'sra': '010010',
@@ -71,7 +74,9 @@ callInstr = {
 
 memInstr = {
     'ld': '000000',
-    'st': '000001'
+    'st': '000001',
+    'lds' : '000010',
+    'sts' : '000011'
 }
 
 reg = {'r0': '00000', 'r1': '00001', 'r2': '00010', 'r3': '00011', 'r4': '00100', 'r5': '00101', 'r6': '00110',
@@ -98,6 +103,11 @@ class Lexer:
         while len(self.content) != 0 and self.content[0].isspace():
             self.content = self.content[1::]
 
+    def chopWhileNotEOL(self):
+        while len(self.content) != 0 and self.content[0] != "\n":
+            self.content = self.content[1::]
+        self.content = self.content[1::]
+
     # chop the array n elements from the left
     def chop(self, n):
         token = self.content[0:n]
@@ -116,11 +126,19 @@ class Lexer:
             n += 1
         return self.chop(n)
 
+    def chopWileNotEndBrace(self):
+        n = 0
+        while n < len(self.content) and self.content[n] != "]":
+            n += 1
+        rVal = self.chop(n)
+        self.chop(1)
+        return rVal
+
     def chopWhileDotAlpha(self):
         n = 0
         if n < len(self.content) and self.content[n] == ".":
             n += 1
-        while n < len(self.content) and self.content[n].isalpha():
+        while n < len(self.content) and self.content[n].isalpha() and self.content[n] != "\n":
             n += 1
         return self.chop(n)
 
@@ -136,17 +154,24 @@ class Lexer:
             n += 1
         return self.chop(n)
 
+
     def nextToken(self):
         # trim the whitespace 
         self.trim_left()
-        # print(self.content[0])
+        if self.content[0:2] == "//":
+            self.chopWhileNotEOL()
+        self.trim_left()
 
         if len(self.content) == 0:
             return None
 
         elif self.content[0] == "m" and self.content[1] == "[":
-            self.content = self.content[2:8] + self.content[9::]
-            return self.chopWhileAlphaNum()
+            if self.content[2:4] == "0x":
+                self.content = self.content[2:8] + self.content[9::]
+                return self.chopWhileAlphaNum()
+            else:
+                self.content = self.content[2::]
+                return self.chopWileNotEndBrace()
 
         elif self.content[0:2] == "0x":
             return self.chopWhileAlphaNum()
@@ -174,7 +199,7 @@ class Lexer:
             return self.chopWhileNum()
 
         else:
-            print("Reached invalid token")
+            print(f"Reached invalid token: {self.content}")
 
 
 # Parser Class to help with iterating the token lists
@@ -223,14 +248,18 @@ class MultiProgramAssembler:
             # else:
             #     print(f"No errors in {file}")
             mifInstrString += translateCode(tokens, symbolVal, labelAddr, forAddr, self.memoryMap[i], self.memoryMap[i+1])
-            i += 1
+            i += 2
 
         mifDataString += translateData(addrData)
         mifInstrString += "\nEND;"
         mifDataString += "\nEND;"
-        with open(output_dir + "output.mif", "w") as f:
+        with open(output_dir + "test16.mif", "w") as f:
             f.write(mifInstrString)
-        with open(output_dir + "outputMM.mif", "w") as f:
+        with open(output_dir + "test16_MM.mif", "w") as f:
+            f.write(mifDataString)
+        with open(localOutput_dir + "test16.mif", "w") as f:
+            f.write(mifInstrString)
+        with open(localOutput_dir + "test16_MM.mif", "w") as f:
             f.write(mifDataString)
         print("Instruction Mif File generated")
         print("Data Mif File generated")
@@ -249,12 +278,15 @@ TODO:   Implement an include system for functions?
             - could do parameter mapping to the CPU registers
 '''
 
-MAX_MEMORY_ADDR = 2**14 - 1
+MAX_MEMORY_ADDR = 2**16 - 1
 
 def main():
     # Needs to be populated in order of programs memory space [start of P1, end of P1, start of P2 ...]
     # memoryMap = [0, 1000, 2000, MAX_MEMORY_ADDR]
+    # TODO: Check to make sure the memory map supports the number of files input for multi-programming
+    # memoryMap = [0, 255, 256, 511, 512, MAX_MEMORY_ADDR]
     memoryMap = [0, MAX_MEMORY_ADDR]
+    
     files = []
     if len(sys.argv) == 1:
         quit("Usage: python3 assembler.py [-h -M] [files]")
@@ -325,10 +357,12 @@ def syntaxCheckConst(tokens, start, end, symbolVal):
     return numErrors
 
 
-def syntaxCheckCode(tokens, start, end, labelAddr, forAddr):
+def syntaxCheckCode(tokens, start, end, labelAddr, symbolAddr, forAddr):
     p = Parser(tokens[start + 1:end])
     forLoopCount = 0
+    currforLoopCount = 0
     endForLoopCount = 0
+    lastForPeekValue = 0
     numErrors = 0
     currentAddress = 0
     while len(p.tokens):
@@ -340,9 +374,11 @@ def syntaxCheckCode(tokens, start, end, labelAddr, forAddr):
                 print("ERROR: reassignment of label attempted: {token}")
                 numErrors += 1
             else:
-                labelAddr[token] = currentAddress
+                labelAddr[token] = currentAddress + 1
             continue
-
+        elif token == "nop":
+            currentAddress += 1
+            continue
         # REGREG Instructions
         elif token in regRegInstr:
             currentAddress += 1
@@ -392,10 +428,11 @@ def syntaxCheckCode(tokens, start, end, labelAddr, forAddr):
                 print(f"ERROR: expected a register {token} {param1} *{param2}* {param3}")
                 numErrors += 1
 
-            if int(param3, 16) > int("0xFFFF", 16) or int(param3, 16) < int("0x0000", 16):
-                print(
-                    f"ERROR: memory address must be between 0x0000 and 0xFFFF: {token} {param1} {param2} *{param3}*")
-                numErrors += 1
+            if param3 not in symbolAddr:
+                if int(param3, 16) > int("0xFFFF", 16) or int(param3, 16) < int("0x0000", 16):
+                    print(
+                        f"ERROR: memory address must be between 0x0000 and 0xFFFF: {token} {param1} {param2} *{param3}*")
+                    numErrors += 1
             p.consume(3)
             continue
 
@@ -439,9 +476,18 @@ def syntaxCheckCode(tokens, start, end, labelAddr, forAddr):
                 print(f"ERROR: iterator initial value must be between 0 and 31: {token} {param1} {param2} *{param3}*")
                 numErrors += 1
             p.consume(3)
-            currentAddress += 1
-            forAddr[token + str(forLoopCount)] = currentAddress
+            lastForPeekValue = [index for index, char in enumerate(p.tokens) if char == 'endfor']
+            print(lastForPeekValue)
+            print(forLoopCount)
+            print(forAddr)
+            if (int(p.tokens[lastForPeekValue[currforLoopCount] + 3]) < 32):
+                forAddr[token + str(forLoopCount)] = currentAddress
+                currentAddress += 1
+            else:
+                forAddr[token + str(forLoopCount)] = currentAddress + 1
+                currentAddress += 5
             forLoopCount += 1
+            currforLoopCount += 1
             continue
 
         elif token == "endfor":
@@ -457,10 +503,11 @@ def syntaxCheckCode(tokens, start, end, labelAddr, forAddr):
                     f"ERROR: invalid token, comparison can only be less than for now: {token} {param1} *{param2}* {param3}")
                 numErrors += 1
 
-            if int(param3) < 0 or int(param3) > 31:
+            if int(param3) < 0 or (int(param3) > 31 and int(param3) % 2) :
                 print(f"ERROR: iterator initial value must be between 0 and 31: {token} {param1} {param2} *{param3}*")
                 numErrors += 1
             p.consume(3)
+            currforLoopCount -= 1
             currentAddress += 3
             endForLoopCount += 1
             continue
@@ -538,19 +585,20 @@ def syntaxCheck(tokens, labelAddr, addrData, symbolVal, forAddr):
         print("Warning: No valid const section")
         warningsCount += 1
 
-    # syntax checking for code section
-    if validCodeSect == 2:
-        errorCount += syntaxCheckCode(tokens, codeSectStart, codeSectEnd, labelAddr, forAddr)
-    else:
-        print("No valid code section")
-        errorCount += 1
-
     # Syntax checking for the data section
     if validDataSect == 2:
         errorCount += syntaxCheckData(tokens, dataSectStart, dataSectEnd, addrData)
     else:
         print("No valid data section")
         warningsCount += 1
+
+    # syntax checking for code section
+    if validCodeSect == 2:
+        errorCount += syntaxCheckCode(tokens, codeSectStart, codeSectEnd, labelAddr, symbolVal, forAddr)
+    else:
+        print("No valid code section")
+        errorCount += 1
+
 
     # syntax checking for data section
     return errorCount, warningsCount
@@ -584,6 +632,8 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
     currAddr = startAddr
     tlatedTokens = ''
     forLoopCount = 0
+    currforLoopCount = 0
+    print(p.tokens)
     while len(p.tokens):
         token = p.peek()
 
@@ -594,6 +644,12 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
             p.consume()
             continue
 
+        if token == "nop":
+            p.consume()
+            machineCode += "1110000000000000"
+            tlatedTokens += f"{currAddr}:{machineCode}; % {token} % \n"
+            currAddr += 1
+            continue
         if token in regRegInstr:
             machineCode += regRegInstr[token]
             machineCode += reg[p.peek(1)]
@@ -619,14 +675,24 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
             p.consume(2)
 
             jAddr = labelAddr["@" + p.peek()]
+            print(labelAddr)
             # Handles Different jumping modes
             # TODO: Implement the rest of jumping modes
+
             if currReg == "r1":
                 if currAddr > jAddr:
                     jumpVal = twosComp(currAddr - jAddr + 1, 16)
+                    # Slice starting at 3 because there is a negative sign to cut off
+                    jumpVal = bin(jumpVal)[3::].zfill(16)
                 else:
-                    jumpVal = jAddr - currAddr - 1
-                tlatedTokens += f"{currAddr}:{bin(jumpVal)[1::].zfill(16)[2::]}; % {p.peek()} % \n"
+                    jumpVal = int(jAddr) - currAddr - 1
+                    # No negative sign so slice starting at 2
+                    jumpVal = bin(jumpVal)[2::].zfill(16)
+                print("---------------------")
+                print(currAddr)
+                print(jAddr)
+                print(twosComp(int(jumpVal, 2), 16) + 1)
+                tlatedTokens += f"{currAddr}:{jumpVal}; % {p.peek()} % \n"
                 p.consume()
 
             currAddr += 1
@@ -642,10 +708,7 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
             currAddr += 1
             addr = p.peek()
             if addr in symbolVal:
-                # TODO: check to see if memeory symbol is in the const section
-                print("Not implemented")
-                tlatedTokens += f"NOT DONE"
-                # tlatedTokens += f"{currAddr}:{symbolVal[addr]}"
+                tlatedTokens += f"{currAddr}:{bin(int(symbolVal[addr], 16))[2::].zfill(16)}; % {addr} %\n"
             else:
                 tlatedTokens += f"{currAddr}:{bin(int(addr, 16))[2::].zfill(16)}; % {addr} % \n"
             p.consume()
@@ -679,15 +742,46 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
             continue
 
         elif token == "for":
+            # TODO: Add support for different starting value for a for loop
+            # Adds the instruction to clear the iterator register
             machineCode += regRegInstr["sub"]
             machineCode += reg[p.peek(1)]
             machineCode += reg[p.peek(1)]
-            # TODO: Add support for different starting value for a for loop
-            # Adds the instruction to clear the iterator register
             tlatedTokens += f"{currAddr}:{machineCode}; % {token}{forLoopCount} {p.peek(1)} {p.peek(3)} % \n"
-            forLoopCount += 1
             currAddr += 1
             p.consume(4)
+            machineCode = ""
+            print(forAddr)
+
+            # Support for using register compare
+            # TODO: Make it work with more than just powers of 2
+            #       Also make the compare register be choosable
+            #       Or support it through a load instruction 
+            lastForPeekValue = [index for index, char in enumerate(p.tokens) if char == 'endfor']
+            if (int(p.peek(lastForPeekValue[currforLoopCount] + 3)) > 31):
+                print("IN HERE")
+                machineCode += regRegInstr["sub"]
+                machineCode += reg["r29"]
+                machineCode += reg["r29"]
+                tlatedTokens += f"{currAddr}:{machineCode}; % sub r29 r29 % \n"
+                currAddr += 1
+                machineCode = ""
+
+                machineCode += regImmedInstr["addc"]
+                machineCode += reg["r29"]
+                machineCode += "00001" 
+                tlatedTokens += f"{currAddr}:{machineCode}; % addc r29 1 % \n"
+                currAddr += 1
+                machineCode = ""
+
+                machineCode += regImmedInstr["rotl"]
+                machineCode += reg["r29"]
+                machineCode += bin(int(math.log2(float(p.peek(lastForPeekValue[forLoopCount] + 3)))))[2::].zfill(5) 
+                tlatedTokens += f"{currAddr}:{machineCode}; % rotl r29 {int(math.log2(float(p.peek(lastForPeekValue[forLoopCount] + 3))))} % \n"
+                currAddr += 1
+                machineCode = ""
+            forLoopCount += 1
+            currforLoopCount += 1
             continue
 
         elif token == "endfor":
@@ -697,9 +791,15 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
             tlatedTokens += f"{currAddr}:{machineCode}; % addc {p.peek(1)} #1 % \n"
             currAddr += 1
 
-            machineCode = regImmedInstr["cmp"]
-            machineCode += reg[p.peek(1)]
-            machineCode += bin(int(p.peek(3)))[2::].zfill(5)
+            if int(p.peek(3)) > 31:
+                machineCode = regRegInstr["cmpr"]
+                machineCode += reg[p.peek(1)]
+                # TODO: Right now r29 is dedicated to this functionality!!
+                machineCode += reg["r29"] 
+            else:
+                machineCode = regImmedInstr["cmpc"]
+                machineCode += reg[p.peek(1)]
+                machineCode += bin(int(p.peek(3)))[2::].zfill(5)
             # Adds the compare instruciton to the mif file
             tlatedTokens += f"{currAddr}:{machineCode}; % cmp {p.peek(1)} {p.peek(3)} % \n"
 
@@ -710,17 +810,24 @@ def translateCode(tokens, symbolVal, labelAddr, forAddr, startAddr, endAddr):
             machineCode = jumpInstr["jz0"].replace("*", reg["r1"])
             tlatedTokens += f"{currAddr}:{machineCode}; % jz0 r1 for{forLoopCount - 1} % \n"
             currAddr += 1
-            jAddr = "for" + str(forLoopCount - 1)
+            jAddr = "for" + str(currforLoopCount - 1)
             jAddrBin = bin((twosComp((currAddr - startAddr) - (forAddr[jAddr]) + 1, 16)))[2::].zfill(16)[1::]
+            print("-------------------------")
+            print(jAddr)
+            print(forAddr[jAddr])
+            print(forLoopCount)
+            print(currAddr)
+            print(twosComp(int(jAddrBin, 2), 16))
             tlatedTokens += f"{currAddr}:{jAddrBin}; % offset to jump to for{forLoopCount - 1} % \n"
             currAddr += 1
-            forLoopCount -= 1
+            currforLoopCount -= 1
+            # forLoopCount -= 1
             p.consume(4)
             continue
         else:
             p.consume()
             print(token)
-    tlatedTokens += f"[{currAddr} .. {endAddr - 1}] : 11111111111111; %EMPTY MEMORY LOCATIONS % \n"
+    tlatedTokens += f"[{currAddr} .. {endAddr}] : 11111111111111; %EMPTY MEMORY LOCATIONS % \n"
 
     return tlatedTokens
 
