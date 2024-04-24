@@ -132,6 +132,24 @@ def main():
             memoryMap = [0, MAX_MEMORY_ADDR]
             mp = MultiProgramAssembler(fileList, memoryMap)
             mp.Multiprogram()
+        if userSelection == 2:
+            testFile = compileSelection[userSelection - 1] + ".asm"
+            fileList = [testFile]
+            memoryMap = [0, MAX_MEMORY_ADDR]
+            mp = MultiProgramAssembler(fileList, memoryMap)
+            mp.Multiprogram()
+        if userSelection == 5:
+            testFile = compileSelection[userSelection - 1] + ".asm"
+            fileList = [testFile]
+            memoryMap = [0, MAX_MEMORY_ADDR]
+            mp = MultiProgramAssembler(fileList, memoryMap)
+            mp.Multiprogram()
+
+    elif menuSelect == 2:
+        helpList = ["In the src directory", "back"]
+        menuPrint("If things aren't working ensure the following", helpList)
+
+
 
 
 # ------------------------------------------------ Function Declarations -------------------------------
