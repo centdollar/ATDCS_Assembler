@@ -17,7 +17,7 @@ The project I chose to develop was an assembler for a custom RISC CPU architectu
 ## Test Cases
 Below are the three different test cases that I have, each one has a short description of its purpose as well and its source code.
 ### Addition:
-The first test case is assembly program that will load two values from memory and then add them together and store the result back into memory. 
+The first test case is assembly program that will load two values from memory and then add them together and store the result back into memory. When running this test case, you should expect to see that the assembly process finished successfully and the program terminates. 
 ~~~
 .const
 
@@ -49,7 +49,7 @@ st r0 r5 m[result]
 ~~~
 
 ### SyntaxError:
-This test case will show the assemblers syntax error detection capabilities. The user can fix this syntax error by following the comments laid out in the SyntaxError.asm file and then rerun it to show that fixing the error will allow the assembler to run properly.
+This test case will show the assemblers syntax error detection capabilities. The user can fix this syntax error by following the comments laid out in the SyntaxError.asm file and then rerun it to show that fixing the error will allow the assembler to run properly. This test will result in the assembly process not completing and an error message will present itself to the user in the terminal. If the user fixes this syntax error then the assembly will complete without any errors.
 ~~~
 .const
 
@@ -72,7 +72,7 @@ addc r5 r6
 ~~~
 
 ### MultipleSources:
-This test case will compile two seperate assembly files into one mif file. Labels are global within this context, so a call from one assembly file to another does work. The source code for the two assembly files are shown below.
+This test case will compile two seperate assembly files into one mif file. Labels are global within this context, so a call from one assembly file to another does work. The source code for the two assembly files are shown below. This test case should result in a successful assembly and show two sections of code translated to machine code.
 
 #### File1
 ~~~
@@ -141,7 +141,7 @@ jz0 r1 MM
 ~~~
 
 ### Custom Assembly:
-This test case can be populated by the user to write a program themselves if they want and see if it compiles. 
+This test case can be populated by the user to write a program themselves if they want and see if it compiles. This test case will at first assemble without errors, but if the user changes it then they will need to follow the documented ISA for the program to assembly fully.
 ~~~
 .const
 
