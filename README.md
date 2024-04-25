@@ -15,12 +15,90 @@ The project I chose to develop was an assembler for a custom RISC CPU architectu
 - When looking through the code base, I reccomend folding all functions and looking at the main function and then the Multiprogram function inside of the MultiProgramAssembler Class. If you want to learn more about how the individual functions work unfold them and take a look one at a time to not get overwhelmed. Also if you have any questions, feel free to reach out to me and I am more than happy to help. My school email can be found in the classlist and just put the subject line as Principles of Computing Assembler questions, or something like that.
 
 
+## Test Cases
+Below are the three different test cases that I have, each one has a short description of its purpose as well and its source code.
+### Addition:
+The first test case is assembly program that will load two values from memory and then add them together and store the result back into memory. 
+~~~
+.const
+
+let val1 = 0x0000
+let val2 = 0x0001
+let result = 0x0002
+
+.endconst
+
+.data
+0x0000 = 0x0100
+0x0001 = 0x0010
+.enddata
+
+
+.code
+
+// Loads the data at address val1 and val2 into registers r5 and r6
+ld r0 r5 m[val1]
+ld r0 r6 m[val2]
+
+// adds r5 to r6 and writes back result into r5
+add r5 r6
+
+// Stores the value in register r5 into the result address
+
+st r0 r5 m[result]
+.endcode
+~~~
+
+### SyntaxError:
+This test case will show the assemblers syntax error detection capabilities. The user can fix this syntax error by following the comments laid out in the SyntaxError.asm file and then rerun it to show that fixing the error will allow the assembler to run properly.
+~~~
+.const
+
+
+.endconst
+
+.data
+.enddata
+
+
+.code
+
+// Adds registers 4 and 5 together
+add r4 r5
+
+// Syntax error below, change r6 to #(constant) where constant is an integer
+addc r5 r6
+
+.endcode
+~~~
+
+### Custom Assembly:
+This test case can be populated by the user to write a program themselves if they want and see if it compiles. 
+~~~
+.const
+
+.endconst
+
+.data
+
+.enddata
+
+
+.code
+
+// Write your own code here to test it!!!
+
+nop
+nop
+nop
+
+.endcode
+~~~
+
 ## How to use the program:
 #### PyCharm:
 To use Pycharm with this project, navigate to the src folder in the directory view on the left side. Then click on assembler.py and click the run button for the python program. This will then display a selection menu which the user inputs what they wish to do in the terminal at the bottom of the screen. The Compile seciton will bring the user to the list of test cases that can be ran to see that the assembler works. There is also an option to use a custom assembly file which the user can change to see the assembler work on your own written code.
 
-
-#### Another:
 
 ### General Program Flow
 #### Inputs:

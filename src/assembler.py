@@ -48,7 +48,7 @@ reg = InstrTranslation.reg
 
 # Assign the local output path of the assembled mif file
 dir_path = "../TestCases/"
-output_dir = "../MifFiles/"
+# output_dir = "../MifFiles/"
 localOutput_dir = "../MifFiles/"
 
 # Configuration
@@ -61,12 +61,15 @@ mifFileHeader = f"WIDTH = {ADDR_WIDTH};\nDEPTH = {MAX_MEMORY_ADDR};\nADDRESS_RAD
 
 # This class handles assembling for single and multiple files
 class MultiProgramAssembler:
-    def __init__(self, files, memoryMap):
+    def __init__(self, files, memoryMap, outputFileName):
         self.files = files
         self.memoryMap = memoryMap
+        self.outputFileName = outputFileName
 
     # Files that will be combined into one mif file for multiprogramming
     files = []
+
+    outputFileName = ""
 
     # Memory map that will give the starting address of each program
     memoryMap = []
@@ -95,13 +98,13 @@ class MultiProgramAssembler:
         mifDataString += translateData(addrData)
         mifInstrString += "\nEND;"
         mifDataString += "\nEND;"
-        with open(output_dir + "test16.mif", "w") as f:
+        # with open(output_dir + "output.mif", "w") as f:
+        #     f.write(mifInstrString)
+        # with open(output_dir + "output_MM.mif", "w") as f:
+        #     f.write(mifDataString)
+        with open(localOutput_dir + self.outputFileName +".mif", "w") as f:
             f.write(mifInstrString)
-        with open(output_dir + "test16_MM.mif", "w") as f:
-            f.write(mifDataString)
-        with open(localOutput_dir + "test16.mif", "w") as f:
-            f.write(mifInstrString)
-        with open(localOutput_dir + "test16_MM.mif", "w") as f:
+        with open(localOutput_dir + self.outputFileName + "_MM.mif", "w") as f:
             f.write(mifDataString)
         print("Instruction Mif File generated")
         print("Data Mif File generated")
@@ -126,28 +129,44 @@ def main():
             print(f"Pick a valid option: not {userSelection}")
             userSelection = int(input("|"))
 
+        # Get an output file name from the user
+        print("| Select an output file name: ")
+        outputfilename = str(input("|"))
+        # make sure that the name is not over 32 characters and more than 1
+        while len(outputfilename) > 32 and len(outputfilename) > 0:
+            print("| Please have the output file name be less than 32 characters")
+            outputfilename = str(input("|"))
+
         if userSelection == 1:
             testFile = compileSelection[userSelection - 1] + ".asm"
             fileList = [testFile]
             memoryMap = [0, MAX_MEMORY_ADDR]
-            mp = MultiProgramAssembler(fileList, memoryMap)
+            mp = MultiProgramAssembler(fileList, memoryMap, outputfilename)
             mp.Multiprogram()
         if userSelection == 2:
             testFile = compileSelection[userSelection - 1] + ".asm"
             fileList = [testFile]
             memoryMap = [0, MAX_MEMORY_ADDR]
-            mp = MultiProgramAssembler(fileList, memoryMap)
+            mp = MultiProgramAssembler(fileList, memoryMap, outputfilename)
             mp.Multiprogram()
         if userSelection == 5:
             testFile = compileSelection[userSelection - 1] + ".asm"
             fileList = [testFile]
             memoryMap = [0, MAX_MEMORY_ADDR]
-            mp = MultiProgramAssembler(fileList, memoryMap)
+            mp = MultiProgramAssembler(fileList, memoryMap, outputfilename)
             mp.Multiprogram()
 
+        print("-----------------------------------")
+        with open(localOutput_dir + outputfilename + ".mif" ,"r") as f:
+            print(f.read())
+        print("-----------------------------------")
+        print("Above is the generated mif file")
     elif menuSelect == 2:
         helpList = ["In the src directory", "back"]
         menuPrint("If things aren't working ensure the following", helpList)
+
+
+    
 
 
 
