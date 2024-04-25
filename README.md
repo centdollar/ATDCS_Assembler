@@ -13,7 +13,7 @@ The project I chose to develop was an assembler for a custom RISC CPU architectu
 ### Notes:
 - On the assembler git repo, their is a main branch which requires the code to be run through the command line using arguments to pass input files. If you end up on the git repo, make sure you are on the PrinciplesOfComputing-CreateProject Branch
 - When looking through the code base, I reccomend folding all functions and looking at the main function and then the Multiprogram function inside of the MultiProgramAssembler Class. If you want to learn more about how the individual functions work unfold them and take a look one at a time to not get overwhelmed. Also if you have any questions, feel free to reach out to me and I am more than happy to help. My school email can be found in the classlist and just put the subject line as Principles of Computing Assembler questions, or something like that.
-
+- **Make sure that you are in the src directory when running the script**
 
 ## Test Cases
 Below are the three different test cases that I have, each one has a short description of its purpose as well and its source code.
@@ -70,6 +70,75 @@ add r4 r5
 addc r5 r6
 
 .endcode
+~~~
+
+### MultipleSources:
+This test case will compile two seperate assembly files into one mif file. Labels are global within this context, so a call from one assembly file to another does work. The source code for the two assembly files are shown below.
+
+#### File1
+~~~
+.const
+
+
+.endconst
+
+.data
+
+.enddata
+
+
+.code
+
+@MM nop
+add r1 r1
+sub r2 r2
+jz0 r1 MM
+
+
+.endcode
+~~~
+
+#### File2
+~~~
+.const
+let hello = 0x0000
+let hello = 0x1234 
+
+
+.endconst
+
+.data
+
+.enddata
+
+
+.code
+
+add r1 r1
+sub r2 r2
+add r4 r4
+sub r5 r5
+addc r1 #1
+call r1 MM
+for r12 = 0
+for r13 = 0
+for r14 = 0
+for r15 = 0
+for r16 = 0
+addc r1 #3
+sub r4 r5
+vadd r4 r4
+mul r5 r3
+fadd r4 r5
+endfor r16 < 12
+endfor r15 < 12
+endfor r14 < 12
+endfor r13 < 12
+endfor r12 < 12
+jz0 r1 MM
+
+.endcode
+
 ~~~
 
 ### Custom Assembly:

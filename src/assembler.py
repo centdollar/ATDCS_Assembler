@@ -121,7 +121,7 @@ def main():
     
     menuSelect = userSelection
     if menuSelect == 1:                 # Select the correct menu choice
-        compileSelection = ["Addition", "SyntaxError", " ", "", "Custom Assembly"]
+        compileSelection = ["Addition", "SyntaxError", "MultipleSourceFiles", "", "Custom Assembly"]
         menuPrint("Which test which you like to run", compileSelection)
 
         userSelection = int(input("|"))
@@ -133,7 +133,7 @@ def main():
         print("| Select an output file name: ")
         outputfilename = str(input("|"))
         # make sure that the name is not over 32 characters and more than 1
-        while len(outputfilename) > 32 and len(outputfilename) > 0:
+        while len(outputfilename) > 32  or not outputfilename:
             print("| Please have the output file name be less than 32 characters")
             outputfilename = str(input("|"))
 
@@ -147,6 +147,12 @@ def main():
             testFile = compileSelection[userSelection - 1] + ".asm"
             fileList = [testFile]
             memoryMap = [0, MAX_MEMORY_ADDR]
+            mp = MultiProgramAssembler(fileList, memoryMap, outputfilename)
+            mp.Multiprogram()
+        if userSelection == 3:
+            testFile = compileSelection[userSelection - 1] + ".asm"
+            fileList = ["Test2.asm", "Test3.asm"]
+            memoryMap = [0, 1000, 1001,MAX_MEMORY_ADDR]
             mp = MultiProgramAssembler(fileList, memoryMap, outputfilename)
             mp.Multiprogram()
         if userSelection == 5:
@@ -187,9 +193,14 @@ def menuPrint(title, selections):
 # TODO: Interesting bug where if a file does not exist a output is generated
 def tokenize(file):
     tokens = []
-    with open(dir_path + file, "r") as f:
-        # Read the file into a string
-        F = f.read()
+    try:
+        with open(dir_path + file, "r") as f:
+            # Read the file into a string
+            F = f.read()
+    except IOError:
+        print("Error: Could not open file see note below")
+        print("Please make sure you are in the src directory")
+        exit()
     # Create a lexer with the contents of the asm file
     lexer = Lexer.Lexer(F)
     # Create tokens until none remain
