@@ -47,9 +47,9 @@ memInstr = InstrTranslation.memInstr
 reg = InstrTranslation.reg
 
 # Assign the local output path of the assembled mif file
-dir_path = "../TestCases/"
+dir_path = "./TestCases/"
 # output_dir = "../MifFiles/"
-localOutput_dir = "../MifFiles/"
+localOutput_dir = "./MifFiles/"
 
 # Configuration
 ADDR_WIDTH = 16
@@ -198,8 +198,7 @@ def tokenize(file):
             # Read the file into a string
             F = f.read()
     except IOError:
-        print("Error: Could not open file see note below")
-        print("Please make sure you are in the src directory")
+        print("Error: Could not open file")
         exit()
     # Create a lexer with the contents of the asm file
     lexer = Lexer.Lexer(F)
