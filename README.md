@@ -167,6 +167,12 @@ nop
 #### PyCharm:
 To use Pycharm with this project, navigate to the src folder in the directory view on the left side. Then click on assembler.py and click the run button for the python program. This will then display a selection menu which the user inputs what they wish to do in the terminal at the bottom of the screen. The Compile seciton will bring the user to the list of test cases that can be ran to see that the assembler works. There is also an option to use a custom assembly file which the user can change to see the assembler work on your own written code.
 
+#### VSCode:
+1) Clone the git repo and open that directory with vscode
+2) Make sure you are on the Principles of Computing Branch in the git repo
+3) Open the src folder and select assembly.py
+4) In the top right hit the run button and then follow the instructions in the terminal
+5) Run test cases and the like.
 
 ### General Program Flow
 #### Inputs:
