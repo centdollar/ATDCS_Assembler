@@ -1,4 +1,4 @@
-MifFiles/*
+MifFiles/*.mif
 .vscode/
 .idea/
 TestCases/Project5.asm
